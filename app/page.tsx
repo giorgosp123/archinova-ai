@@ -6,6 +6,40 @@ import { ChangeEvent, useMemo, useRef, useState } from "react";
 const styles = ["Modern", "Minimal", "Mediterranean", "Luxury", "Industrial", "Scandinavian"];
 const ratios = ["16:9", "4:3", "1:1"];
 
+async function prepareReferenceImage(file: File) {
+  const bitmap = await createImageBitmap(file);
+  const maxSide = 500;
+  const scale = Math.min(1, maxSide / bitmap.width, maxSide / bitmap.height);
+  const width = Math.max(1, Math.round(bitmap.width * scale));
+  const height = Math.max(1, Math.round(bitmap.height * scale));
+
+  const canvas = document.createElement("canvas");
+  canvas.width = width;
+  canvas.height = height;
+
+  const context = canvas.getContext("2d");
+  if (!context) {
+    bitmap.close();
+    throw new Error("Could not prepare the reference image.");
+  }
+
+  context.fillStyle = "#ffffff";
+  context.fillRect(0, 0, width, height);
+  context.drawImage(bitmap, 0, 0, width, height);
+  bitmap.close();
+
+  const blob = await new Promise<Blob | null>((resolve) => {
+    canvas.toBlob(resolve, "image/jpeg", 0.94);
+  });
+
+  if (!blob) throw new Error("Could not prepare the reference image.");
+
+  return new File([blob], "archinova-reference.jpg", {
+    type: "image/jpeg",
+    lastModified: Date.now(),
+  });
+}
+
 export default function Home() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
@@ -47,8 +81,9 @@ export default function Home() {
     setError("");
 
     try {
+      const referenceImage = await prepareReferenceImage(selectedFile);
       const body = new FormData();
-      body.append("image", selectedFile);
+      body.append("image", referenceImage);
       body.append("prompt", prompt.trim());
       body.append("style", style);
       body.append("ratio", ratio);
@@ -251,7 +286,7 @@ export default function Home() {
                 <div className="panel-block small-block render-count">
                   <label>Output</label>
                   <strong>1 AI render</strong>
-                  <small>Medium quality</small>
+                  <small>Cloudflare AI</small>
                 </div>
               </div>
 
