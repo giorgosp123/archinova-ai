@@ -9,18 +9,43 @@ const allowedImageTypes = new Set([
   "image/webp",
 ]);
 
-function outputSize(ratio: string) {
-  if (ratio === "1:1") return "1024x1024";
-  return "1536x1024";
+function outputDimensions(ratio: string) {
+  if (ratio === "1:1") return { width: 1024, height: 1024 };
+  if (ratio === "4:3") return { width: 1024, height: 768 };
+  return { width: 1024, height: 576 };
+}
+
+function cloudflareErrorMessage(data: unknown) {
+  if (!data || typeof data !== "object") return "The AI render could not be created.";
+
+  const record = data as {
+    errors?: Array<{ message?: string }>;
+    error?: string | { message?: string };
+  };
+
+  if (Array.isArray(record.errors) && record.errors[0]?.message) {
+    return record.errors[0].message;
+  }
+
+  if (typeof record.error === "string") return record.error;
+  if (record.error && typeof record.error === "object" && record.error.message) {
+    return record.error.message;
+  }
+
+  return "The AI render could not be created.";
 }
 
 export async function POST(request: Request) {
   try {
-    const apiKey = process.env.OPENAI_API_KEY;
+    const accountId = process.env.CLOUDFLARE_ACCOUNT_ID;
+    const apiToken = process.env.CLOUDFLARE_API_TOKEN;
 
-    if (!apiKey) {
+    if (!accountId || !apiToken) {
       return NextResponse.json(
-        { error: "AI rendering is not configured yet. Add OPENAI_API_KEY in Vercel." },
+        {
+          error:
+            "AI rendering is not configured yet. Add CLOUDFLARE_ACCOUNT_ID and CLOUDFLARE_API_TOKEN in Vercel.",
+        },
         { status: 503 }
       );
     }
@@ -42,8 +67,8 @@ export async function POST(request: Request) {
       );
     }
 
-    if (image.size > 15 * 1024 * 1024) {
-      return NextResponse.json({ error: "Image must be smaller than 15 MB." }, { status: 400 });
+    if (image.size > 8 * 1024 * 1024) {
+      return NextResponse.json({ error: "Image must be smaller than 8 MB." }, { status: 400 });
     }
 
     if (!prompt) {
@@ -51,48 +76,85 @@ export async function POST(request: Request) {
     }
 
     const architecturePrompt = [
-      "Create a professional photorealistic architectural visualization using the uploaded image as the primary project reference.",
-      "Preserve the important architectural geometry, massing, proportions, openings and recognizable design intent from the reference unless the user explicitly asks to change them.",
-      "Treat plans, elevations and sketches as design information, not decorative texture.",
+      "Use input image 0 as the primary architectural reference.",
+      "Create a professional photorealistic architectural visualization from the reference.",
+      "Preserve the recognizable massing, geometry, proportions, openings, floor relationships and main design intent unless the user explicitly asks to alter them.",
+      "Treat plans, elevations and sketches as architectural information, not as decorative texture.",
       `Architectural style: ${style}.`,
       `User direction: ${prompt}`,
-      "Produce a polished client-presentation image with realistic materials, physically believable lighting, refined landscaping and architectural photography quality.",
-      "Do not add labels, annotations, dimensions, logos, watermarks or written text to the render."
+      "Use realistic architectural materials, physically believable lighting, refined landscaping and premium architectural photography quality.",
+      "Do not add labels, dimensions, logos, watermarks or written text."
     ].join("\n");
 
+    const { width, height } = outputDimensions(ratio);
     const body = new FormData();
-    body.append("model", "gpt-image-2");
-    body.append("image", image, image.name || "project.png");
     body.append("prompt", architecturePrompt);
-    body.append("size", outputSize(ratio));
-    body.append("quality", "medium");
+    body.append("input_image_0", image, image.name || "reference.jpg");
+    body.append("width", String(width));
+    body.append("height", String(height));
+    body.append("guidance", "4.5");
 
-    const response = await fetch("https://api.openai.com/v1/images/edits", {
+    const endpoint = `https://api.cloudflare.com/client/v4/accounts/${encodeURIComponent(
+      accountId
+    )}/ai/run/@cf/black-forest-labs/flux-2-klein-4b`;
+
+    const response = await fetch(endpoint, {
       method: "POST",
       headers: {
-        Authorization: `Bearer ${apiKey}`,
+        Authorization: `Bearer ${apiToken}`,
       },
       body,
     });
 
-    const data = await response.json();
+    const responseType = response.headers.get("content-type") || "";
 
     if (!response.ok) {
-      const message = data?.error?.message || "The AI render could not be created.";
-      console.error("OpenAI image edit error:", message);
+      let message = "The AI render could not be created.";
+
+      try {
+        if (responseType.includes("application/json")) {
+          const errorData = await response.json();
+          message = cloudflareErrorMessage(errorData);
+        } else {
+          const text = await response.text();
+          if (text.trim()) message = text.slice(0, 500);
+        }
+      } catch {
+        // Keep the friendly fallback error above.
+      }
+
+      console.error("Cloudflare Workers AI error:", message);
       return NextResponse.json({ error: message }, { status: response.status });
     }
 
-    const first = data?.data?.[0];
-    const imageUrl = first?.b64_json
-      ? `data:image/png;base64,${first.b64_json}`
-      : first?.url || null;
+    if (responseType.startsWith("image/")) {
+      const bytes = Buffer.from(await response.arrayBuffer());
+      const mime = responseType.split(";")[0] || "image/png";
+      return NextResponse.json({
+        image: `data:${mime};base64,${bytes.toString("base64")}`,
+        provider: "cloudflare",
+      });
+    }
 
-    if (!imageUrl) {
+    const data = await response.json();
+    const result = data?.result ?? data;
+    const encodedImage =
+      result?.image ||
+      result?.b64_json ||
+      result?.data?.[0]?.b64_json ||
+      result?.data?.[0]?.image ||
+      null;
+
+    if (!encodedImage || typeof encodedImage !== "string") {
+      console.error("Unexpected Cloudflare Workers AI response:", data);
       return NextResponse.json({ error: "The AI returned no image." }, { status: 502 });
     }
 
-    return NextResponse.json({ image: imageUrl });
+    const imageUrl = encodedImage.startsWith("data:image/")
+      ? encodedImage
+      : `data:image/png;base64,${encodedImage}`;
+
+    return NextResponse.json({ image: imageUrl, provider: "cloudflare" });
   } catch (error) {
     console.error("ArchiNova render error:", error);
     return NextResponse.json(
