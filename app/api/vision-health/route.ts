@@ -11,8 +11,8 @@ export async function GET() {
     return NextResponse.json({ ok: false, error: "missing config" }, { status: 503 });
   }
 
-  // Tiny valid PNG. This only verifies the same multimodal request path used by analyze-view.
-  const png = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Y9Zl9sAAAAASUVORK5CYII=";
+  // 16x16 white PNG. This verifies the same multimodal path used by analyze-view.
+  const png = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAIAAACQkWg2AAAAGUlEQVR4nGP8//8/AymAiSTVoxpGNQwpDQBVbQMdPVIhQwAAAABJRU5ErkJggg==";
   const endpoint = `https://api.cloudflare.com/client/v4/accounts/${encodeURIComponent(accountId)}/ai/v1/chat/completions`;
 
   const response = await fetch(endpoint, {
