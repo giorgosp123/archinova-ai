@@ -5,24 +5,117 @@ export const maxDuration = 60;
 
 const allowedImageTypes = new Set(["image/png", "image/jpeg", "image/webp"]);
 
-function extractAssistantText(data: any) {
-  return (
-    data?.choices?.[0]?.message?.content ||
-    data?.result?.response ||
-    data?.result?.text ||
-    data?.response ||
-    (typeof data?.result === "string" ? data.result : "") ||
-    ""
-  );
+type AnyRecord = Record<string, any>;
+
+function textFromValue(value: any): string {
+  if (typeof value === "string") return value;
+  if (Array.isArray(value)) {
+    return value
+      .map((item) => {
+        if (typeof item === "string") return item;
+        if (item && typeof item === "object") return item.text || item.content || item.value || "";
+        return "";
+      })
+      .filter(Boolean)
+      .join("\n");
+  }
+  if (value && typeof value === "object") {
+    return value.text || value.content || value.value || "";
+  }
+  return "";
 }
 
-function cloudflareErrorMessage(data: any) {
+function extractAssistantText(data: AnyRecord) {
+  const message = data?.choices?.[0]?.message;
+  const candidates = [
+    message?.content,
+    message?.text,
+    message?.response,
+    message?.reasoning_content,
+    message?.reasoning,
+    data?.choices?.[0]?.text,
+    data?.result?.response,
+    data?.result?.text,
+    data?.response,
+    typeof data?.result === "string" ? data.result : "",
+  ];
+
+  for (const candidate of candidates) {
+    const text = textFromValue(candidate).trim();
+    if (text) return text;
+  }
+  return "";
+}
+
+function cloudflareErrorMessage(data: AnyRecord) {
   return (
     data?.errors?.[0]?.message ||
     data?.error?.message ||
     data?.error ||
     "The floor plan could not be created."
   );
+}
+
+async function synthesizeGeometry(params: {
+  endpoint: string;
+  apiToken: string;
+  prompt: string;
+  maxTokens: number;
+}) {
+  const response = await fetch(params.endpoint, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${params.apiToken}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      model: "@cf/google/gemma-4-26b-a4b-it",
+      messages: [
+        {
+          role: "system",
+          content:
+            "You are a senior architectural reconstruction specialist. Output the final geometry brief directly. Do not expose chain-of-thought. Accuracy and uncertainty reporting are more important than completeness.",
+        },
+        { role: "user", content: params.prompt },
+      ],
+      temperature: 0,
+      max_tokens: params.maxTokens,
+      chat_template_kwargs: {
+        enable_thinking: false,
+      },
+    }),
+  });
+
+  let data: AnyRecord = {};
+  try {
+    data = await response.json();
+  } catch {
+    return {
+      ok: false,
+      status: response.status || 502,
+      error: "Cloudflare returned an unreadable geometry response.",
+      data: {},
+      text: "",
+    };
+  }
+
+  if (!response.ok) {
+    return {
+      ok: false,
+      status: response.status,
+      error: String(cloudflareErrorMessage(data)),
+      data,
+      text: "",
+    };
+  }
+
+  return {
+    ok: true,
+    status: response.status,
+    error: "",
+    data,
+    text: extractAssistantText(data).trim(),
+  };
 }
 
 export async function POST(request: Request) {
@@ -54,58 +147,96 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "No analyzed 3D views were supplied." }, { status: 400 });
     }
 
+    // Cap text per view to keep the synthesis deterministic and prevent a single noisy
+    // analysis from dominating the combined reconstruction.
+    const compactAnalyses = analyses.map((item) => ({
+      view: item.view,
+      analysis: String(item.analysis || "").trim().slice(0, 2200),
+    }));
+
     const synthesisPrompt = [
-      "You are reconstructing ONE building from multiple architectural 3D views that were analyzed separately.",
-      "Your job is to reconcile the views into one consistent top-down geometry brief for a floor plan.",
-      "Accuracy is more important than completeness. Never silently invent geometry that is not supported.",
-      `Target floor: ${floor}.`,
-      `Accuracy mode: ${accuracyMode}.`,
-      knownDimension ? `Known project dimension: ${knownDimension}.` : "No verified physical dimension was supplied.",
-      notes ? `Architect notes: ${notes}` : "No additional architect notes were supplied.",
-      "Cross-check facade relationships, visible setbacks, projections, entrances, stairs, windows, terraces and ground-contact edges between views.",
-      "Resolve contradictions explicitly. Distinguish CONFIRMED, PROBABLE and UNKNOWN geometry.",
+      "Reconstruct ONE building from multiple 3D-view evidence summaries.",
+      "Return the final geometry brief directly. No chain-of-thought, preamble or design suggestions.",
+      "Accuracy is more important than completeness. Never silently invent geometry.",
+      `TARGET FLOOR: ${floor}`,
+      `ACCURACY MODE: ${accuracyMode}`,
+      knownDimension ? `VERIFIED DIMENSION: ${knownDimension}` : "VERIFIED DIMENSION: none supplied",
+      notes ? `ARCHITECT NOTES: ${notes}` : "ARCHITECT NOTES: none supplied",
+      "Cross-check the same visible edges and openings across different views. Resolve camera-view contradictions conservatively.",
       accuracyMode === "strict"
-        ? "STRICT MODE: hidden interior walls and rooms that cannot be supported must remain UNKNOWN. Do not fill them just to make the plan look complete."
-        : "INFERRED MODE: hidden areas may be filled conservatively, but clearly separate strong evidence from inference.",
-      "Return a concise reconstruction brief with these headings: FOOTPRINT, EXTERIOR OPENINGS, VERTICAL CIRCULATION, INTERIOR EVIDENCE, UNKNOWN AREAS, CONTRADICTIONS, CONFIDENCE.",
-      "Do not output markdown tables.",
-      "\nVIEW ANALYSES:\n" + analyses.map((item) => `VIEW ${item.view}:\n${item.analysis}`).join("\n\n"),
+        ? "STRICT EVIDENCE: unsupported hidden interior walls and rooms must stay UNKNOWN. Preserve only evidence-supported footprint and interior geometry."
+        : "INFERRED MODE: fill hidden areas minimally and conservatively while respecting every visible exterior clue.",
+      "Use these headings exactly and keep the entire answer under 500 words:",
+      "FOOTPRINT:",
+      "EXTERIOR OPENINGS:",
+      "VERTICAL CIRCULATION:",
+      "INTERIOR EVIDENCE:",
+      "UNKNOWN AREAS:",
+      "CONTRADICTIONS:",
+      "CONFIDENCE:",
+      "\nVIEW EVIDENCE:\n" + compactAnalyses.map((item) => `VIEW ${item.view}:\n${item.analysis}`).join("\n\n"),
     ].join("\n");
 
-    const chatEndpoint = `https://api.cloudflare.com/client/v4/accounts/${encodeURIComponent(accountId)}/ai/v1/chat/completions`;
-    const synthesisResponse = await fetch(chatEndpoint, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${apiToken}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model: "@cf/google/gemma-4-26b-a4b-it",
-        messages: [
-          {
-            role: "system",
-            content:
-              "You are a senior architectural reconstruction specialist. You combine multi-view evidence into conservative geometry without hallucinating hidden spaces.",
-          },
-          { role: "user", content: synthesisPrompt },
-        ],
-        temperature: 0.1,
-        max_completion_tokens: 1200,
-      }),
+    const chatEndpoint = `https://api.cloudflare.com/client/v4/accounts/${encodeURIComponent(
+      accountId
+    )}/ai/v1/chat/completions`;
+
+    let synthesis = await synthesizeGeometry({
+      endpoint: chatEndpoint,
+      apiToken,
+      prompt: synthesisPrompt,
+      maxTokens: 850,
     });
 
-    const synthesisData = await synthesisResponse.json();
-    if (!synthesisResponse.ok) {
-      console.error("Cloudflare synthesis error:", synthesisData);
-      return NextResponse.json(
-        { error: String(cloudflareErrorMessage(synthesisData)) },
-        { status: synthesisResponse.status }
-      );
+    if (!synthesis.ok) {
+      console.error("Cloudflare synthesis error:", synthesis.data);
+      return NextResponse.json({ error: synthesis.error }, { status: synthesis.status });
     }
 
-    const reconstructionBrief = extractAssistantText(synthesisData).trim();
+    if (!synthesis.text) {
+      console.warn("Empty geometry synthesis, retrying:", {
+        finishReason: synthesis.data?.choices?.[0]?.finish_reason,
+        usage: synthesis.data?.usage,
+        messageKeys: Object.keys(synthesis.data?.choices?.[0]?.message || {}),
+      });
+
+      const fallbackPrompt = [
+        `Combine ${compactAnalyses.length} architectural view summaries into one conservative ${floor} plan brief.`,
+        knownDimension ? `Known scale: ${knownDimension}.` : "No known scale.",
+        notes ? `Architect notes: ${notes}` : "",
+        accuracyMode === "strict"
+          ? "Do not invent hidden rooms. Mark unsupported areas UNKNOWN."
+          : "Infer hidden areas minimally.",
+        "Reply immediately under 300 words with: FOOTPRINT, OPENINGS, CIRCULATION, INTERIOR, UNKNOWN, CONFIDENCE.",
+        compactAnalyses.map((item) => `VIEW ${item.view}: ${item.analysis}`).join("\n"),
+      ]
+        .filter(Boolean)
+        .join("\n");
+
+      synthesis = await synthesizeGeometry({
+        endpoint: chatEndpoint,
+        apiToken,
+        prompt: fallbackPrompt,
+        maxTokens: 520,
+      });
+    }
+
+    if (!synthesis.ok) {
+      console.error("Cloudflare synthesis retry error:", synthesis.data);
+      return NextResponse.json({ error: synthesis.error }, { status: synthesis.status });
+    }
+
+    const reconstructionBrief = synthesis.text.trim();
     if (!reconstructionBrief) {
-      return NextResponse.json({ error: "The geometry synthesis returned no result." }, { status: 502 });
+      console.error("Geometry synthesis remained empty:", {
+        finishReason: synthesis.data?.choices?.[0]?.finish_reason,
+        usage: synthesis.data?.usage,
+        messageKeys: Object.keys(synthesis.data?.choices?.[0]?.message || {}),
+      });
+      return NextResponse.json(
+        { error: "The geometry could not be synthesized. Please try again." },
+        { status: 502 }
+      );
     }
 
     const anchors: File[] = [];
@@ -119,23 +250,23 @@ export async function POST(request: Request) {
     }
 
     const drawingPrompt = [
-      "Create a clean orthographic top-down architectural floor plan reconstruction of the SAME building shown in the reference images.",
-      "This is not a new design exercise. Follow the reconstruction brief below as the source of truth.",
-      "Prioritize the exterior footprint, projections, recesses, entrances, visible openings and vertical circulation exactly as supported by the evidence.",
+      "Create an orthographic top-down architectural floor plan reconstruction of the SAME building shown in the reference images.",
+      "This is reconstruction, not architectural redesign. The geometry brief is the source of truth.",
+      "Match the exterior footprint, projections, recesses, entrances, visible openings and circulation as closely as the evidence allows.",
       accuracyMode === "strict"
-        ? "For unsupported hidden interior areas: leave them open, blank, lightly hatched or unresolved. Do NOT invent bedrooms, bathrooms, corridors or walls simply to complete the drawing."
-        : "For hidden areas, infer only a minimal plausible layout consistent with all exterior evidence and architect notes.",
-      "Use a true plan view with no perspective and no 3D rendering.",
+        ? "Unsupported hidden interior zones must remain blank, unresolved or lightly hatched. Do NOT invent bedrooms, bathrooms, corridors or walls to make the drawing complete."
+        : "Hidden areas may be minimally inferred only when compatible with all evidence.",
+      "Use true plan view only. No perspective, axonometric view, 3D rendering or exterior elevation.",
       planStyle === "Technical"
-        ? "Technical drafting style: white background, crisp black and dark gray wall lines, clean door swings, window openings, restrained line weights, minimal or no furniture, no decorative landscaping."
-        : "Clean presentation plan style: white background, precise dark wall lines, subtle light-gray fills, minimal furniture only where supported, still orthographic and technically readable.",
+        ? "Technical drawing: pure white background, crisp black/dark-gray walls, readable openings, restrained line weights, minimal furniture, no landscaping."
+        : "Clean presentation plan: white background, precise dark walls, subtle gray fills and only minimal supported furniture.",
       knownDimension
-        ? `Use this known scale clue where possible: ${knownDimension}. Do not invent other dimensions.`
-        : "Do not print invented measurements or dimensions.",
+        ? `Scale clue: ${knownDimension}. Use it only as stated and do not invent other measurements.`
+        : "Do not print invented measurements.",
       `Target floor: ${floor}.`,
-      `The system analyzed ${viewCount || analyses.length} views before drawing this plan.`,
-      "Do not add a title block, logo, watermark or explanatory text inside the drawing.",
-      "RECONSTRUCTION BRIEF:",
+      `Evidence came from ${viewCount || compactAnalyses.length} uploaded views.`,
+      "No title block, logo, watermark or explanatory text inside the drawing.",
+      "GEOMETRY BRIEF:",
       reconstructionBrief,
     ].join("\n");
 
@@ -199,8 +330,8 @@ export async function POST(request: Request) {
     }
 
     const confidenceMatch = reconstructionBrief.match(/CONFIDENCE\s*:?\s*([^\n]+)/i);
-    const confidence = confidenceMatch?.[1]?.trim()?.slice(0, 80) || undefined;
-    const compactReport = reconstructionBrief.replace(/\s+/g, " ").trim().slice(0, 900);
+    const confidence = confidenceMatch?.[1]?.trim()?.slice(0, 100) || undefined;
+    const compactReport = reconstructionBrief.replace(/\s+/g, " ").trim().slice(0, 1200);
 
     return NextResponse.json({
       image,
