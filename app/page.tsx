@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import { ChangeEvent, useMemo, useRef, useState } from "react";
 
 const styles = ["Modern", "Minimal", "Mediterranean", "Luxury", "Industrial", "Scandinavian"];
@@ -7,6 +8,7 @@ const ratios = ["16:9", "4:3", "1:1"];
 
 export default function Home() {
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [fileName, setFileName] = useState<string>("");
   const [previewUrl, setPreviewUrl] = useState<string>("");
   const [prompt, setPrompt] = useState(
@@ -15,7 +17,8 @@ export default function Home() {
   const [style, setStyle] = useState("Modern");
   const [ratio, setRatio] = useState("16:9");
   const [generating, setGenerating] = useState(false);
-  const [showResult, setShowResult] = useState(false);
+  const [resultUrl, setResultUrl] = useState("");
+  const [error, setError] = useState("");
 
   const promptCount = useMemo(() => prompt.trim().length, [prompt]);
 
@@ -23,8 +26,10 @@ export default function Home() {
     const file = event.target.files?.[0];
     if (!file) return;
 
+    setSelectedFile(file);
     setFileName(file.name);
-    setShowResult(false);
+    setResultUrl("");
+    setError("");
 
     if (file.type.startsWith("image/")) {
       const url = URL.createObjectURL(file);
@@ -34,13 +39,37 @@ export default function Home() {
     }
   }
 
-  function generateDemo() {
+  async function generateConcept() {
+    if (!selectedFile || !prompt.trim()) return;
+
     setGenerating(true);
-    setShowResult(false);
-    window.setTimeout(() => {
+    setResultUrl("");
+    setError("");
+
+    try {
+      const body = new FormData();
+      body.append("image", selectedFile);
+      body.append("prompt", prompt.trim());
+      body.append("style", style);
+      body.append("ratio", ratio);
+
+      const response = await fetch("/api/render", {
+        method: "POST",
+        body,
+      });
+
+      const data = await response.json();
+
+      if (!response.ok || !data?.image) {
+        throw new Error(data?.error || "The render could not be created.");
+      }
+
+      setResultUrl(data.image);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Something went wrong while creating the render.");
+    } finally {
       setGenerating(false);
-      setShowResult(true);
-    }, 900);
+    }
   }
 
   return (
@@ -121,7 +150,7 @@ export default function Home() {
             <article className="step-card">
               <span className="step-number">01</span>
               <h3>Upload</h3>
-              <p>Add a floor plan, elevation, sketch or reference image.</p>
+              <p>Add a plan, elevation, sketch or reference image.</p>
             </article>
             <article className="step-card">
               <span className="step-number">02</span>
@@ -142,7 +171,7 @@ export default function Home() {
           <div className="section-heading studio-heading">
             <span className="section-kicker">ArchiNova Studio</span>
             <h2>Build the scene you have in mind.</h2>
-            <p>This first version already includes the full front-end workflow. The real AI engine comes next.</p>
+            <p>Upload an architectural image, describe the direction and let the rendering pipeline create a presentation-ready concept.</p>
           </div>
 
           <div className="studio-grid">
@@ -156,7 +185,7 @@ export default function Home() {
                 <input
                   ref={fileInputRef}
                   type="file"
-                  accept="image/*,.pdf"
+                  accept="image/png,image/jpeg,image/webp"
                   onChange={handleFile}
                   hidden
                 />
@@ -169,7 +198,7 @@ export default function Home() {
                 >
                   <span className="upload-icon">＋</span>
                   <strong>{fileName || "Upload a plan or sketch"}</strong>
-                  <small>{fileName ? "Tap to replace file" : "JPG, PNG or PDF"}</small>
+                  <small>{fileName ? "Tap to replace file" : "PNG, JPG or WEBP · PDF comes next"}</small>
                 </button>
               </div>
 
@@ -220,19 +249,36 @@ export default function Home() {
                   </div>
                 </div>
                 <div className="panel-block small-block render-count">
-                  <label>Outputs</label>
-                  <strong>4 variations</strong>
-                  <small>Presentation set</small>
+                  <label>Output</label>
+                  <strong>1 AI render</strong>
+                  <small>Medium quality</small>
                 </div>
               </div>
+
+              {error && (
+                <div
+                  role="alert"
+                  style={{
+                    marginBottom: 16,
+                    padding: "12px 14px",
+                    border: "1px solid rgba(255,140,120,.35)",
+                    background: "rgba(255,100,80,.08)",
+                    color: "#ffd0c8",
+                    fontSize: 13,
+                    lineHeight: 1.5,
+                  }}
+                >
+                  {error}
+                </div>
+              )}
 
               <button
                 type="button"
                 className="generate-button"
-                onClick={generateDemo}
-                disabled={generating || !prompt.trim()}
+                onClick={generateConcept}
+                disabled={generating || !prompt.trim() || !selectedFile}
               >
-                {generating ? <><span className="spinner" /> Building concept...</> : <>Generate concept <span>✦</span></>}
+                {generating ? <><span className="spinner" /> Rendering with AI...</> : <>Generate concept <span>✦</span></>}
               </button>
             </div>
 
@@ -240,12 +286,12 @@ export default function Home() {
               <div className="result-topbar">
                 <div>
                   <span className="result-dot" />
-                  <strong>Preview canvas</strong>
+                  <strong>Render canvas</strong>
                 </div>
                 <span>{ratio} · {style}</span>
               </div>
 
-              {!showResult ? (
+              {!resultUrl ? (
                 <div className="empty-result">
                   <div className="mini-plan" aria-hidden="true">
                     <span className="wall wall-a" />
@@ -253,26 +299,40 @@ export default function Home() {
                     <span className="wall wall-c" />
                     <span className="wall wall-d" />
                   </div>
-                  <strong>Your concept will appear here</strong>
-                  <p>Choose your input and direction, then generate a demo concept.</p>
+                  <strong>{generating ? "ArchiNova is building your render" : "Your AI render will appear here"}</strong>
+                  <p>{generating ? "Keep this page open while the image is being generated." : "Upload an image, choose your direction and generate the concept."}</p>
                 </div>
               ) : (
-                <div className="demo-result">
-                  <div className="demo-sky" />
-                  <div className="demo-house-back" />
-                  <div className="demo-house-front">
-                    <span className="demo-window window-one" />
-                    <span className="demo-window window-two" />
-                    <span className="demo-window window-three" />
+                <div style={{ padding: 16 }}>
+                  <div
+                    style={{
+                      position: "relative",
+                      width: "100%",
+                      aspectRatio: ratio === "1:1" ? "1 / 1" : ratio === "4:3" ? "4 / 3" : "16 / 9",
+                      overflow: "hidden",
+                      background: "#111614",
+                    }}
+                  >
+                    <Image
+                      src={resultUrl}
+                      alt={`${style} architectural AI render`}
+                      fill
+                      unoptimized
+                      style={{ objectFit: "contain" }}
+                    />
                   </div>
-                  <div className="demo-deck" />
-                  <div className="demo-water" />
-                  <div className="demo-tree tree-one" />
-                  <div className="demo-tree tree-two" />
-                  <div className="demo-label">
-                    <span>DEMO CONCEPT</span>
-                    <strong>{style} residence</strong>
-                    <small>AI generation API not connected yet</small>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, marginTop: 14 }}>
+                    <div style={{ display: "grid", gap: 3 }}>
+                      <small style={{ color: "#8f9a94" }}>ARCHINOVA AI RENDER</small>
+                      <strong>{style} concept</strong>
+                    </div>
+                    <a
+                      href={resultUrl}
+                      download={`archinova-${style.toLowerCase()}-render.png`}
+                      className="nav-cta"
+                    >
+                      Download
+                    </a>
                   </div>
                 </div>
               )}
