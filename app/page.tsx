@@ -1,12 +1,26 @@
 "use client";
 
 import Image from "next/image";
-import { ChangeEvent, useMemo, useRef, useState } from "react";
+import { ChangeEvent, useMemo, useState } from "react";
 
 const styles = ["Modern", "Minimal", "Mediterranean", "Luxury", "Industrial", "Scandinavian"];
 const ratios = ["16:9", "4:3", "1:1"];
+const renderTypes = ["Exterior", "Interior", "Concept"];
 
-async function prepareReferenceImage(file: File) {
+const referenceSlots = [
+  { label: "Main design", hint: "Plan, elevation or sketch", required: true },
+  { label: "Facade", hint: "Elevation or exterior reference", required: false },
+  { label: "Style", hint: "Materials, mood or inspiration", required: false },
+  { label: "Extra", hint: "Any useful project reference", required: false },
+];
+
+const promptExamples = [
+  "Modern villa with natural stone, warm wood, large glass openings and soft sunset light.",
+  "Minimal white residence with a calm garden, pool, clean concrete details and bright daylight.",
+  "Luxury Mediterranean home with textured stone, warm plaster, arches and refined landscaping.",
+];
+
+async function prepareReferenceImage(file: File, index: number) {
   const bitmap = await createImageBitmap(file);
   const maxSide = 500;
   const scale = Math.min(1, maxSide / bitmap.width, maxSide / bitmap.height);
@@ -29,64 +43,99 @@ async function prepareReferenceImage(file: File) {
   bitmap.close();
 
   const blob = await new Promise<Blob | null>((resolve) => {
-    canvas.toBlob(resolve, "image/jpeg", 0.94);
+    canvas.toBlob(resolve, "image/jpeg", 0.92);
   });
 
   if (!blob) throw new Error("Could not prepare the reference image.");
 
-  return new File([blob], "archinova-reference.jpg", {
+  return new File([blob], `archinova-reference-${index + 1}.jpg`, {
     type: "image/jpeg",
     lastModified: Date.now(),
   });
 }
 
 export default function Home() {
-  const fileInputRef = useRef<HTMLInputElement>(null);
-  const [selectedFile, setSelectedFile] = useState<File | null>(null);
-  const [fileName, setFileName] = useState<string>("");
-  const [previewUrl, setPreviewUrl] = useState<string>("");
-  const [prompt, setPrompt] = useState(
-    "Modern two-storey villa with warm natural stone, large glass openings, landscaped garden and soft sunset lighting. Photorealistic architectural visualization."
-  );
+  const [files, setFiles] = useState<Array<File | null>>([null, null, null, null]);
+  const [previews, setPreviews] = useState<string[]>(["", "", "", ""]);
+  const [prompt, setPrompt] = useState(promptExamples[0]);
   const [style, setStyle] = useState("Modern");
   const [ratio, setRatio] = useState("16:9");
+  const [renderType, setRenderType] = useState("Exterior");
+  const [preserveDesign, setPreserveDesign] = useState(true);
   const [generating, setGenerating] = useState(false);
   const [resultUrl, setResultUrl] = useState("");
   const [error, setError] = useState("");
 
   const promptCount = useMemo(() => prompt.trim().length, [prompt]);
+  const referenceCount = files.filter(Boolean).length;
 
-  function handleFile(event: ChangeEvent<HTMLInputElement>) {
+  function handleReference(index: number, event: ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
     if (!file) return;
 
-    setSelectedFile(file);
-    setFileName(file.name);
+    setFiles((current) => {
+      const next = [...current];
+      next[index] = file;
+      return next;
+    });
+
+    setPreviews((current) => {
+      const next = [...current];
+      if (next[index]) URL.revokeObjectURL(next[index]);
+      next[index] = URL.createObjectURL(file);
+      return next;
+    });
+
     setResultUrl("");
     setError("");
-
-    if (file.type.startsWith("image/")) {
-      const url = URL.createObjectURL(file);
-      setPreviewUrl(url);
-    } else {
-      setPreviewUrl("");
-    }
   }
 
-  async function generateConcept() {
-    if (!selectedFile || !prompt.trim()) return;
+  function removeReference(index: number) {
+    setFiles((current) => {
+      const next = [...current];
+      next[index] = null;
+      return next;
+    });
+
+    setPreviews((current) => {
+      const next = [...current];
+      if (next[index]) URL.revokeObjectURL(next[index]);
+      next[index] = "";
+      return next;
+    });
+
+    setResultUrl("");
+    setError("");
+  }
+
+  async function generateRender() {
+    if (!files[0] || !prompt.trim()) return;
 
     setGenerating(true);
     setResultUrl("");
     setError("");
 
     try {
-      const referenceImage = await prepareReferenceImage(selectedFile);
+      const chosenReferences = files
+        .map((file, slotIndex) => ({ file, slotIndex }))
+        .filter((item): item is { file: File; slotIndex: number } => item.file instanceof File);
+
+      const prepared = await Promise.all(
+        chosenReferences.map(({ file }, index) => prepareReferenceImage(file, index))
+      );
+
       const body = new FormData();
-      body.append("image", referenceImage);
+      prepared.forEach((file, index) => {
+        const slotIndex = chosenReferences[index].slotIndex;
+        body.append(`image_${index}`, file);
+        body.append(`role_${index}`, referenceSlots[slotIndex].label);
+      });
+
       body.append("prompt", prompt.trim());
       body.append("style", style);
       body.append("ratio", ratio);
+      body.append("renderType", renderType);
+      body.append("preserveDesign", String(preserveDesign));
 
       const response = await fetch("/api/render", {
         method: "POST",
@@ -108,9 +157,9 @@ export default function Home() {
   }
 
   return (
-    <main>
-      <header className="nav-shell">
-        <nav className="nav container">
+    <main className="app-shell">
+      <header className="topbar">
+        <div className="topbar-inner">
           <a className="brand" href="#top" aria-label="ArchiNova AI home">
             <span className="brand-mark" aria-hidden="true">
               <span />
@@ -122,160 +171,167 @@ export default function Home() {
               <small>AI</small>
             </span>
           </a>
-
-          <div className="nav-links">
-            <a href="#how">How it works</a>
-            <a href="#studio">Studio</a>
-            <a href="#features">Features</a>
-          </div>
-
-          <a className="nav-cta" href="#studio">Open Studio</a>
-        </nav>
+          <a className="topbar-action" href="#studio">Open Studio</a>
+        </div>
       </header>
 
-      <section className="hero container" id="top">
-        <div className="hero-copy">
+      <section className="intro" id="top">
+        <div className="intro-copy">
           <span className="eyebrow">AI architectural visualization</span>
-          <h1>
-            From plan
-            <span> to vision.</span>
-          </h1>
-          <p>
-            Turn plans, sketches and reference images into presentation-ready architectural concepts in minutes.
-          </p>
-          <div className="hero-actions">
-            <a className="primary-button" href="#studio">Create a render</a>
-            <a className="text-button" href="#how">See how it works <span>↗</span></a>
-          </div>
-          <div className="hero-proof">
-            <span>Plans</span><i />
-            <span>Sketches</span><i />
-            <span>References</span><i />
-            <span>AI renders</span>
+          <h1>Turn your design into a visual.</h1>
+          <p>Upload your project references, describe the look, and generate a presentation-ready architectural image.</p>
+          <div className="intro-actions">
+            <a className="primary-action" href="#studio">Start a render</a>
+            <span className="intro-note">No 3D setup required</span>
           </div>
         </div>
-
-        <div className="hero-visual" aria-label="Architectural concept preview">
-          <div className="visual-grid" />
-          <div className="building building-back" />
-          <div className="building building-main">
-            <div className="glass glass-a" />
-            <div className="glass glass-b" />
-            <div className="terrace" />
+        <div className="intro-card" aria-hidden="true">
+          <div className="intro-grid" />
+          <div className="intro-plan">
+            <span className="plan-line line-a" />
+            <span className="plan-line line-b" />
+            <span className="plan-line line-c" />
+            <span className="plan-line line-d" />
           </div>
-          <div className="pool" />
-          <div className="visual-badge">
-            <span className="pulse" />
-            AI concept preview
+          <div className="intro-arrow">→</div>
+          <div className="intro-building">
+            <span className="building-window bw-a" />
+            <span className="building-window bw-b" />
           </div>
-          <div className="visual-caption">
-            <span>Villa 01</span>
-            <strong>Warm minimalism</strong>
-          </div>
+          <span className="intro-badge">Plan → Render</span>
         </div>
       </section>
 
-      <section className="how-section" id="how">
-        <div className="container">
-          <div className="section-heading compact-heading">
-            <span className="section-kicker">Simple workflow</span>
-            <h2>Three steps. No 3D detour.</h2>
+      <section className="studio" id="studio">
+        <div className="studio-head">
+          <div>
+            <span className="eyebrow light">ArchiNova Studio</span>
+            <h2>Create your render</h2>
           </div>
-          <div className="steps-grid">
-            <article className="step-card">
-              <span className="step-number">01</span>
-              <h3>Upload</h3>
-              <p>Add a plan, elevation, sketch or reference image.</p>
-            </article>
-            <article className="step-card">
-              <span className="step-number">02</span>
-              <h3>Describe</h3>
-              <p>Tell ArchiNova the materials, atmosphere, style and lighting you want.</p>
-            </article>
-            <article className="step-card">
-              <span className="step-number">03</span>
-              <h3>Visualize</h3>
-              <p>Create polished concept visuals ready for a client presentation.</p>
-            </article>
-          </div>
+          <p>Three simple steps. Add references, describe the result, generate.</p>
         </div>
-      </section>
 
-      <section className="studio-section" id="studio">
-        <div className="container studio-wrap">
-          <div className="section-heading studio-heading">
-            <span className="section-kicker">ArchiNova Studio</span>
-            <h2>Build the scene you have in mind.</h2>
-            <p>Upload an architectural image, describe the direction and let the rendering pipeline create a presentation-ready concept.</p>
-          </div>
-
-          <div className="studio-grid">
-            <div className="control-panel">
-              <div className="panel-block">
-                <div className="panel-label-row">
-                  <label>1. Project input</label>
-                  {fileName && <span className="success-pill">Ready</span>}
+        <div className="workspace">
+          <div className="controls-card">
+            <section className="control-section">
+              <div className="section-row">
+                <div>
+                  <span className="step-pill">1</span>
+                  <h3>Add references</h3>
                 </div>
+                <span className="section-meta">{referenceCount}/4 added</span>
+              </div>
+              <p className="section-help">Start with your main plan, elevation or sketch. Add more only when they help.</p>
 
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  accept="image/png,image/jpeg,image/webp"
-                  onChange={handleFile}
-                  hidden
-                />
+              <div className="reference-grid">
+                {referenceSlots.map((slot, index) => (
+                  <div className={`reference-slot ${files[index] ? "filled" : ""}`} key={slot.label}>
+                    <label className="reference-upload">
+                      <input
+                        type="file"
+                        accept="image/png,image/jpeg,image/webp"
+                        onChange={(event) => handleReference(index, event)}
+                        hidden
+                      />
+                      {previews[index] ? (
+                        <span
+                          className="reference-preview"
+                          style={{ backgroundImage: `url(${previews[index]})` }}
+                        />
+                      ) : (
+                        <span className="reference-plus">+</span>
+                      )}
+                      <span className="reference-copy">
+                        <strong>{slot.label}{slot.required ? " *" : ""}</strong>
+                        <small>{files[index]?.name || slot.hint}</small>
+                      </span>
+                    </label>
+                    {files[index] && (
+                      <button
+                        className="remove-reference"
+                        type="button"
+                        onClick={() => removeReference(index)}
+                        aria-label={`Remove ${slot.label}`}
+                      >
+                        ×
+                      </button>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </section>
 
-                <button
-                  type="button"
-                  className={`upload-zone ${previewUrl ? "has-preview" : ""}`}
-                  onClick={() => fileInputRef.current?.click()}
-                  style={previewUrl ? { backgroundImage: `linear-gradient(rgba(9,13,12,.36),rgba(9,13,12,.5)), url(${previewUrl})` } : undefined}
-                >
-                  <span className="upload-icon">＋</span>
-                  <strong>{fileName || "Upload a plan or sketch"}</strong>
-                  <small>{fileName ? "Tap to replace file" : "PNG, JPG or WEBP · PDF comes next"}</small>
-                </button>
+            <section className="control-section">
+              <div className="section-row">
+                <div>
+                  <span className="step-pill">2</span>
+                  <h3>Describe the result</h3>
+                </div>
+                <span className="section-meta">{promptCount} chars</span>
               </div>
 
-              <div className="panel-block">
-                <div className="panel-label-row">
-                  <label htmlFor="prompt">2. Describe your vision</label>
-                  <span>{promptCount} chars</span>
-                </div>
-                <textarea
-                  id="prompt"
-                  value={prompt}
-                  onChange={(event) => setPrompt(event.target.value)}
-                  placeholder="Describe materials, mood, light, landscape, furniture..."
-                  rows={6}
-                />
-              </div>
+              <textarea
+                className="prompt-box"
+                value={prompt}
+                onChange={(event) => setPrompt(event.target.value)}
+                placeholder="Example: modern stone villa, warm wood, large windows, sunset light..."
+                rows={5}
+              />
 
-              <div className="panel-block">
-                <label>3. Architectural style</label>
-                <div className="chip-grid">
-                  {styles.map((item) => (
-                    <button
-                      type="button"
-                      key={item}
-                      className={style === item ? "chip active" : "chip"}
-                      onClick={() => setStyle(item)}
-                    >
-                      {item}
-                    </button>
-                  ))}
+              <div className="example-row">
+                {promptExamples.map((example, index) => (
+                  <button key={example} type="button" onClick={() => setPrompt(example)}>
+                    Example {index + 1}
+                  </button>
+                ))}
+              </div>
+            </section>
+
+            <section className="control-section compact-section">
+              <div className="section-row">
+                <div>
+                  <span className="step-pill">3</span>
+                  <h3>Choose the look</h3>
                 </div>
               </div>
 
-              <div className="split-controls">
-                <div className="panel-block small-block">
-                  <label>Aspect ratio</label>
-                  <div className="ratio-row">
+              <label className="field-label">Render type</label>
+              <div className="segmented-row three">
+                {renderTypes.map((item) => (
+                  <button
+                    type="button"
+                    key={item}
+                    className={renderType === item ? "active" : ""}
+                    onClick={() => setRenderType(item)}
+                  >
+                    {item}
+                  </button>
+                ))}
+              </div>
+
+              <label className="field-label">Style</label>
+              <div className="style-grid">
+                {styles.map((item) => (
+                  <button
+                    type="button"
+                    key={item}
+                    className={style === item ? "active" : ""}
+                    onClick={() => setStyle(item)}
+                  >
+                    {item}
+                  </button>
+                ))}
+              </div>
+
+              <div className="settings-row">
+                <div className="setting-block">
+                  <label className="field-label">Format</label>
+                  <div className="segmented-row">
                     {ratios.map((item) => (
                       <button
                         type="button"
                         key={item}
-                        className={ratio === item ? "ratio active" : "ratio"}
+                        className={ratio === item ? "active" : ""}
                         onClick={() => setRatio(item)}
                       >
                         {item}
@@ -283,116 +339,107 @@ export default function Home() {
                     ))}
                   </div>
                 </div>
-                <div className="panel-block small-block render-count">
-                  <label>Output</label>
-                  <strong>1 AI render</strong>
-                  <small>Cloudflare AI</small>
-                </div>
+
+                <label className="preserve-toggle">
+                  <span>
+                    <strong>Preserve design</strong>
+                    <small>Keep closer to your main reference</small>
+                  </span>
+                  <input
+                    type="checkbox"
+                    checked={preserveDesign}
+                    onChange={(event) => setPreserveDesign(event.target.checked)}
+                  />
+                  <i aria-hidden="true" />
+                </label>
               </div>
+            </section>
 
-              {error && (
-                <div
-                  role="alert"
-                  style={{
-                    marginBottom: 16,
-                    padding: "12px 14px",
-                    border: "1px solid rgba(255,140,120,.35)",
-                    background: "rgba(255,100,80,.08)",
-                    color: "#ffd0c8",
-                    fontSize: 13,
-                    lineHeight: 1.5,
-                  }}
-                >
-                  {error}
-                </div>
+            {error && <div className="error-box" role="alert">{error}</div>}
+
+            <button
+              type="button"
+              className="generate-button"
+              onClick={generateRender}
+              disabled={generating || !files[0] || !prompt.trim()}
+            >
+              {generating ? (
+                <><span className="spinner" /> Creating your render...</>
+              ) : (
+                <>Generate render <span>✦</span></>
               )}
+            </button>
+            {!files[0] && <p className="button-hint">Add your main design reference to start.</p>}
+          </div>
 
-              <button
-                type="button"
-                className="generate-button"
-                onClick={generateConcept}
-                disabled={generating || !prompt.trim() || !selectedFile}
-              >
-                {generating ? <><span className="spinner" /> Rendering with AI...</> : <>Generate concept <span>✦</span></>}
-              </button>
+          <div className="result-card">
+            <div className="result-bar">
+              <div>
+                <span className="status-dot" />
+                <strong>Render</strong>
+              </div>
+              <span>{ratio} · {style}</span>
             </div>
 
-            <div className="result-panel">
-              <div className="result-topbar">
-                <div>
-                  <span className="result-dot" />
-                  <strong>Render canvas</strong>
-                </div>
-                <span>{ratio} · {style}</span>
+            {!resultUrl ? (
+              <div className={`result-empty ${generating ? "is-loading" : ""}`}>
+                <div className="empty-icon">✦</div>
+                <strong>{generating ? "Creating your image" : "Your render will appear here"}</strong>
+                <p>{generating ? "Keep this page open for a moment." : "Add your project, choose the look, then generate."}</p>
               </div>
-
-              {!resultUrl ? (
-                <div className="empty-result">
-                  <div className="mini-plan" aria-hidden="true">
-                    <span className="wall wall-a" />
-                    <span className="wall wall-b" />
-                    <span className="wall wall-c" />
-                    <span className="wall wall-d" />
-                  </div>
-                  <strong>{generating ? "ArchiNova is building your render" : "Your AI render will appear here"}</strong>
-                  <p>{generating ? "Keep this page open while the image is being generated." : "Upload an image, choose your direction and generate the concept."}</p>
+            ) : (
+              <div className="result-content">
+                <div
+                  className="result-image-wrap"
+                  style={{ aspectRatio: ratio === "1:1" ? "1 / 1" : ratio === "4:3" ? "4 / 3" : "16 / 9" }}
+                >
+                  <Image
+                    src={resultUrl}
+                    alt={`${style} ${renderType.toLowerCase()} architectural AI render`}
+                    fill
+                    unoptimized
+                    style={{ objectFit: "contain" }}
+                  />
                 </div>
-              ) : (
-                <div style={{ padding: 16 }}>
-                  <div
-                    style={{
-                      position: "relative",
-                      width: "100%",
-                      aspectRatio: ratio === "1:1" ? "1 / 1" : ratio === "4:3" ? "4 / 3" : "16 / 9",
-                      overflow: "hidden",
-                      background: "#111614",
-                    }}
-                  >
-                    <Image
-                      src={resultUrl}
-                      alt={`${style} architectural AI render`}
-                      fill
-                      unoptimized
-                      style={{ objectFit: "contain" }}
-                    />
+
+                <div className="result-actions">
+                  <div>
+                    <small>ARCHINOVA AI RENDER</small>
+                    <strong>{style} {renderType.toLowerCase()}</strong>
                   </div>
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, marginTop: 14 }}>
-                    <div style={{ display: "grid", gap: 3 }}>
-                      <small style={{ color: "#8f9a94" }}>ARCHINOVA AI RENDER</small>
-                      <strong>{style} concept</strong>
-                    </div>
+                  <div className="result-buttons">
+                    <button type="button" className="secondary-action" onClick={generateRender} disabled={generating}>
+                      Regenerate
+                    </button>
                     <a
                       href={resultUrl}
-                      download={`archinova-${style.toLowerCase()}-render.png`}
-                      className="nav-cta"
+                      download={`archinova-${style.toLowerCase()}-${renderType.toLowerCase()}.png`}
+                      className="download-action"
                     >
                       Download
                     </a>
                   </div>
                 </div>
-              )}
-            </div>
+              </div>
+            )}
           </div>
         </div>
       </section>
 
-      <section className="features-section" id="features">
-        <div className="container features-grid">
-          <div className="section-heading feature-copy">
-            <span className="section-kicker">Built for design work</span>
-            <h2>Less rendering friction. More creative direction.</h2>
-            <p>ArchiNova is being designed as a focused visualization workspace, not a generic image generator.</p>
-          </div>
-          <div className="feature-list">
-            <article><span>01</span><div><strong>Reference-aware workflow</strong><p>Keep the project grounded in your plan, sketch and visual references.</p></div></article>
-            <article><span>02</span><div><strong>Architectural presets</strong><p>Control style, mood, ratio and presentation direction without prompt gymnastics.</p></div></article>
-            <article><span>03</span><div><strong>Project history</strong><p>Next phase: save concepts, variations and presentation sets per client project.</p></div></article>
-          </div>
+      <section className="tips-section">
+        <div className="tips-copy">
+          <span className="eyebrow">Better results</span>
+          <h2>Give the AI useful design information.</h2>
+        </div>
+        <div className="tips-grid">
+          <div><span>01</span><strong>Use a clear main reference</strong><p>A plan, elevation or sketch with readable geometry works best.</p></div>
+          <div><span>02</span><strong>Add a facade when you have one</strong><p>It helps the render follow windows, materials and exterior character.</p></div>
+          <div><span>03</span><strong>Describe light and materials</strong><p>Stone, wood, concrete, daylight, sunset and landscaping all guide the result.</p></div>
         </div>
       </section>
 
       <footer className="footer">
-        <div className="container footer-inner">
+        <div className="footer-inner">
           <div className="brand footer-brand">
             <span className="brand-mark" aria-hidden="true"><span /><span /><span /></span>
             <span className="brand-copy"><strong>ArchiNova</strong><small>AI</small></span>
