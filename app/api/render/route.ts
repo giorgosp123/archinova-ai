@@ -51,7 +51,9 @@ export async function POST(request: Request) {
     }
 
     const incoming = await request.formData();
+    const mode = String(incoming.get("mode") || "generate").trim();
     const prompt = String(incoming.get("prompt") || "").trim();
+    const revisionPrompt = String(incoming.get("revisionPrompt") || "").trim();
     const style = String(incoming.get("style") || "Modern").trim();
     const ratio = String(incoming.get("ratio") || "16:9").trim();
     const renderType = String(incoming.get("renderType") || "Exterior").trim();
@@ -91,25 +93,48 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Describe the result you want first." }, { status: 400 });
     }
 
+    if (mode === "edit" && !revisionPrompt) {
+      return NextResponse.json({ error: "Describe the changes you want to make." }, { status: 400 });
+    }
+
     const referenceGuide = references
       .map(({ role }, index) => `Image ${index}: ${role}.`)
       .join("\n");
 
-    const preservationInstruction = preserveDesign
+    const generatePreservation = preserveDesign
       ? "Follow the primary design reference closely. Preserve recognizable geometry, massing, proportions, floor relationships, openings and main architectural intent. Do not invent a completely different building."
       : "Use the references as creative direction. You may reinterpret secondary details while keeping the overall architectural idea coherent.";
 
-    const architecturePrompt = [
-      `Create a professional photorealistic ${renderType.toLowerCase()} architectural visualization.`,
-      referenceGuide,
-      "Use image 0 as the primary project reference. Use the other images only as supporting information for facade, materials, mood or style according to their labels.",
-      preservationInstruction,
-      "Treat plans, elevations and sketches as architectural information, not as decorative texture.",
-      `Architectural style: ${style}.`,
-      `User direction: ${prompt}`,
-      "Use realistic materials, physically believable lighting, refined landscaping and premium architectural photography quality.",
-      "Do not add labels, dimensions, logos, watermarks or written text."
-    ].join("\n");
+    const editPreservation = preserveDesign
+      ? "Preserve the current building identity, massing, proportions, principal openings, camera position, perspective and composition as closely as possible. Keep everything that the user did not ask to change consistent."
+      : "Keep the current render recognizable, but allow more creative reinterpretation of secondary architectural details where it improves the requested revision.";
+
+    const architecturePrompt = mode === "edit"
+      ? [
+          `Revise the existing professional ${renderType.toLowerCase()} architectural visualization rather than creating an unrelated new building.`,
+          referenceGuide,
+          "Image 0 is the current render and is the visual base for this revision.",
+          "Use the remaining images as original project references to protect the architectural intent and design information.",
+          editPreservation,
+          "Apply only the requested revision. Do not casually change unrelated facade elements, geometry, camera angle, landscaping, materials or lighting unless the requested revision requires it.",
+          `Architectural style: ${style}.`,
+          `Original project direction: ${prompt}`,
+          `Requested revision: ${revisionPrompt}`,
+          "Treat plans, elevations and sketches as architectural information, not decorative texture.",
+          "Produce a polished client-presentation image with realistic materials and physically believable lighting.",
+          "Do not add labels, dimensions, logos, watermarks or written text."
+        ].join("\n")
+      : [
+          `Create a professional photorealistic ${renderType.toLowerCase()} architectural visualization.`,
+          referenceGuide,
+          "Use image 0 as the primary project reference. Use the other images only as supporting information for facade, materials, mood or style according to their labels.",
+          generatePreservation,
+          "Treat plans, elevations and sketches as architectural information, not as decorative texture.",
+          `Architectural style: ${style}.`,
+          `User direction: ${prompt}`,
+          "Use realistic materials, physically believable lighting, refined landscaping and premium architectural photography quality.",
+          "Do not add labels, dimensions, logos, watermarks or written text."
+        ].join("\n");
 
     const { width, height } = outputDimensions(ratio);
     const body = new FormData();
@@ -162,6 +187,7 @@ export async function POST(request: Request) {
       return NextResponse.json({
         image: `data:${mime};base64,${bytes.toString("base64")}`,
         provider: "cloudflare",
+        mode,
       });
     }
 
@@ -183,7 +209,7 @@ export async function POST(request: Request) {
       ? encodedImage
       : `data:image/png;base64,${encodedImage}`;
 
-    return NextResponse.json({ image: imageUrl, provider: "cloudflare" });
+    return NextResponse.json({ image: imageUrl, provider: "cloudflare", mode });
   } catch (error) {
     console.error("ArchiNova render error:", error);
     return NextResponse.json(
