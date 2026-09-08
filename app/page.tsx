@@ -22,6 +22,20 @@ const accuracyModes = [
   { value: "strict", label: "Evidence only", hint: "Leave hidden areas unresolved" },
 ];
 
+const sideOptions = [
+  ["unknown", "Unknown / let AI decide"],
+  ["front", "Front"],
+  ["left", "Left"],
+  ["right", "Right"],
+  ["rear", "Rear / garden"],
+] as const;
+
+const yesNoOptions = [
+  ["unknown", "Unknown / let AI decide"],
+  ["yes", "Yes"],
+  ["no", "No"],
+] as const;
+
 async function resizeImage(file: File, maxSide: number, quality: number, name: string) {
   const bitmap = await createImageBitmap(file);
   const scale = Math.min(1, maxSide / bitmap.width, maxSide / bitmap.height);
@@ -62,6 +76,17 @@ export default function Home() {
   const [accuracyMode, setAccuracyMode] = useState("inferred");
   const [knownDimension, setKnownDimension] = useState("");
   const [notes, setNotes] = useState("");
+  const [architectFacts, setArchitectFacts] = useState<Record<string, string>>({
+    mainEntranceSide: "unknown",
+    parking: "unknown",
+    staircase: "unknown",
+    groundFloorWC: "unknown",
+    kitchenSide: "unknown",
+    livingSide: "unknown",
+    outdoorDining: "unknown",
+    outdoorSitting: "unknown",
+    livingDiningPlan: "unknown",
+  });
   const [generating, setGenerating] = useState(false);
   const [progress, setProgress] = useState("");
   const [error, setError] = useState("");
@@ -75,6 +100,11 @@ export default function Home() {
     if (viewCount <= 7) return `${viewCount} views: strong multi-view coverage`;
     return `${viewCount} views: detailed multi-view coverage`;
   }, [viewCount]);
+
+  function updateFact(key: string, value: string) {
+    setArchitectFacts((current) => ({ ...current, [key]: value }));
+    setResult(null);
+  }
 
   function addViews(event: ChangeEvent<HTMLInputElement>) {
     const selected = Array.from(event.target.files || []).filter((file) =>
@@ -154,6 +184,7 @@ export default function Home() {
         body.append("accuracyMode", accuracyMode);
         body.append("knownDimension", knownDimension.trim());
         body.append("notes", notes.trim());
+        body.append("architectFacts", JSON.stringify(architectFacts));
         body.append("totalViews", String(views.length));
         body.append("batchIndex", String(batchIndex));
         body.append("batchCount", String(batchCount));
@@ -208,16 +239,16 @@ export default function Home() {
 
       <section className="focused-hero" id="top">
         <div>
-          <span className="eyebrow">Multi-view architectural reconstruction</span>
-          <h1>3D views in. One consistent floor plan out.</h1>
+          <span className="eyebrow">Smart architectural reconstruction</span>
+          <h1>3D views in. Architect-aware floor plan out.</h1>
           <p>
-            ArchiNova now reads several views of the same building together, cross-matches the facades and openings, locks one shared shell, then reconstructs the plan inside it.
+            ArchiNova reads several views together, locks the real shell first, then reconstructs circulation and spaces using openings, parking, entry, terraces and optional facts from the architect.
           </p>
         </div>
         <div className="hero-flow" aria-hidden="true">
           <div className="flow-card"><span>01</span><strong>3D views</strong></div>
           <div className="flow-arrow">→</div>
-          <div className="flow-card"><span>02</span><strong>Joint vision</strong></div>
+          <div className="flow-card"><span>02</span><strong>Shell + spaces</strong></div>
           <div className="flow-arrow">→</div>
           <div className="flow-card accent-card"><span>03</span><strong>Floor plan</strong></div>
         </div>
@@ -298,7 +329,86 @@ export default function Home() {
             <div className="section-divider" />
 
             <div className="card-heading compact">
-              <div><span className="step-number">3</span><h2>Reconstruction mode</h2></div>
+              <div><span className="step-number">3</span><h2>Smart architect facts</h2></div>
+              <span className="optional-label">Optional</span>
+            </div>
+            <p className="card-help">Set only what you know. Leave anything else on “Unknown” and ArchiNova will infer it from the views.</p>
+
+            <div className="field-grid">
+              <label className="field">
+                <span>Main entrance side</span>
+                <select value={architectFacts.mainEntranceSide} onChange={(event) => updateFact("mainEntranceSide", event.target.value)}>
+                  {sideOptions.map(([value, label]) => <option value={value} key={value}>{label}</option>)}
+                </select>
+              </label>
+
+              <label className="field">
+                <span>Parking / carport</span>
+                <select value={architectFacts.parking} onChange={(event) => updateFact("parking", event.target.value)}>
+                  <option value="unknown">Unknown / let AI decide</option>
+                  <option value="none">None</option>
+                  <option value="1_car">1 car</option>
+                  <option value="2_cars">2 cars</option>
+                  <option value="3_plus_cars">3+ cars</option>
+                </select>
+              </label>
+
+              <label className="field">
+                <span>Staircase on this floor</span>
+                <select value={architectFacts.staircase} onChange={(event) => updateFact("staircase", event.target.value)}>
+                  {yesNoOptions.map(([value, label]) => <option value={value} key={value}>{label}</option>)}
+                </select>
+              </label>
+
+              <label className="field">
+                <span>Ground-floor WC</span>
+                <select value={architectFacts.groundFloorWC} onChange={(event) => updateFact("groundFloorWC", event.target.value)}>
+                  {yesNoOptions.map(([value, label]) => <option value={value} key={value}>{label}</option>)}
+                </select>
+              </label>
+
+              <label className="field">
+                <span>Kitchen side</span>
+                <select value={architectFacts.kitchenSide} onChange={(event) => updateFact("kitchenSide", event.target.value)}>
+                  {sideOptions.map(([value, label]) => <option value={value} key={value}>{label}</option>)}
+                </select>
+              </label>
+
+              <label className="field">
+                <span>Main living side</span>
+                <select value={architectFacts.livingSide} onChange={(event) => updateFact("livingSide", event.target.value)}>
+                  {sideOptions.map(([value, label]) => <option value={value} key={value}>{label}</option>)}
+                </select>
+              </label>
+
+              <label className="field">
+                <span>Outdoor dining</span>
+                <select value={architectFacts.outdoorDining} onChange={(event) => updateFact("outdoorDining", event.target.value)}>
+                  {yesNoOptions.map(([value, label]) => <option value={value} key={value}>{label}</option>)}
+                </select>
+              </label>
+
+              <label className="field">
+                <span>Outdoor sitting</span>
+                <select value={architectFacts.outdoorSitting} onChange={(event) => updateFact("outdoorSitting", event.target.value)}>
+                  {yesNoOptions.map(([value, label]) => <option value={value} key={value}>{label}</option>)}
+                </select>
+              </label>
+
+              <label className="field">
+                <span>Living / dining layout</span>
+                <select value={architectFacts.livingDiningPlan} onChange={(event) => updateFact("livingDiningPlan", event.target.value)}>
+                  <option value="unknown">Unknown / let AI decide</option>
+                  <option value="open_plan">Open plan</option>
+                  <option value="separated">Separated</option>
+                </select>
+              </label>
+            </div>
+
+            <div className="section-divider" />
+
+            <div className="card-heading compact">
+              <div><span className="step-number">4</span><h2>Reconstruction mode</h2></div>
             </div>
 
             <div className="accuracy-grid">
@@ -343,7 +453,7 @@ export default function Home() {
             </button>
 
             <p className="accuracy-disclaimer">
-              Full reconstruction infers hidden rooms from the shared shell, openings and circulation clues. Evidence only draws just what the views can support directly.
+              ArchiNova now reconstructs the shell first and locks it before inferring rooms. User-confirmed facts override architectural guesses.
             </p>
           </div>
 
@@ -359,7 +469,7 @@ export default function Home() {
                   <span className="ph-wall a" /><span className="ph-wall b" /><span className="ph-wall c" /><span className="ph-wall d" />
                 </div>
                 <strong>{generating ? progress : "Your reconstructed plan will appear here"}</strong>
-                <p>{generating ? "The views are being compared together before any plan geometry is drawn." : "Add several views of the same project, then start the reconstruction."}</p>
+                <p>{generating ? "The building shell and spaces are being reconstructed in separate passes." : "Add several views of the same project, then start the reconstruction."}</p>
               </div>
             ) : (
               <div className="result-content">
@@ -367,12 +477,12 @@ export default function Home() {
                   <Image src={result.image} alt="AI reconstructed architectural floor plan" fill unoptimized style={{ objectFit: "contain" }} />
                 </div>
                 <div className="result-actions">
-                  <div><small>ARCHINOVA MULTI-VIEW</small><strong>{planStyle} floor plan</strong></div>
+                  <div><small>ARCHINOVA SMART ARCHITECT</small><strong>{planStyle} floor plan</strong></div>
                   <a className="download-action" href={result.image} download="archinova-reconstructed-floor-plan.svg">Download</a>
                 </div>
                 {result.report && (
                   <div className="evidence-report">
-                    <span>Geometry report</span>
+                    <span>Architecture report</span>
                     <p>{result.report}</p>
                   </div>
                 )}
@@ -385,20 +495,20 @@ export default function Home() {
       <section className="capture-guide">
         <div>
           <span className="eyebrow">Best capture set</span>
-          <h2>Give the model overlapping evidence from every side.</h2>
+          <h2>Give ArchiNova enough evidence to think like an architect.</h2>
         </div>
         <div className="guide-grid">
-          <article><span>01</span><strong>Front + rear</strong><p>Capture the complete width and all visible openings.</p></article>
-          <article><span>02</span><strong>Left + right</strong><p>Side views reveal depth, projections and setbacks.</p></article>
-          <article><span>03</span><strong>Corner + elevated</strong><p>These connect the facades into one shared footprint.</p></article>
-          <article><span>04</span><strong>Interior / cutaway</strong><p>These are the strongest evidence for kitchen, WC, stairs and partitions.</p></article>
+          <article><span>01</span><strong>Front + rear</strong><p>Capture the complete width, entry, driveway and main openings.</p></article>
+          <article><span>02</span><strong>Left + right</strong><p>Side views reveal depth, carports, projections and service zones.</p></article>
+          <article><span>03</span><strong>Corner + elevated</strong><p>These connect every facade into one stepped shell.</p></article>
+          <article><span>04</span><strong>Interior / cutaway</strong><p>These sharply improve kitchen, WC, stair and partition accuracy.</p></article>
         </div>
       </section>
 
       <footer className="footer">
         <div className="footer-inner">
           <div className="brand footer-brand"><span className="brand-mark" aria-hidden="true"><span /><span /><span /></span><span className="brand-copy"><strong>ArchiNova</strong><small>AI</small></span></div>
-          <p>Joint multi-view 3D to floor plan reconstruction.</p>
+          <p>Smart multi-view architectural reconstruction.</p>
           <span>© 2026 ArchiNova AI</span>
         </div>
       </footer>
