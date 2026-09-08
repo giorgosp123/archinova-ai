@@ -20,6 +20,7 @@ type Geometry = {
   rooms?: PolygonItem[];
   unknownAreas?: PolygonItem[];
   confidence?: number;
+  spaceConfidence?: Record<string, number>;
   summary?: string;
 };
 
@@ -74,6 +75,17 @@ function normalizePolygons(value: any): PolygonItem[] {
   });
 }
 
+function normalizeConfidenceMap(value: any): Record<string, number> | undefined {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return undefined;
+  const result: Record<string, number> = {};
+  for (const [key, raw] of Object.entries(value)) {
+    const number = Number(raw);
+    if (!Number.isFinite(number)) continue;
+    result[key.toLowerCase()] = Math.max(0, Math.min(1, number));
+  }
+  return Object.keys(result).length ? result : undefined;
+}
+
 function normalizeGeometry(raw: AnyRecord): Geometry | null {
   const footprint = points(raw?.footprint);
   if (footprint.length < 3) return null;
@@ -102,6 +114,7 @@ function normalizeGeometry(raw: AnyRecord): Geometry | null {
     rooms: normalizePolygons(raw?.rooms),
     unknownAreas: normalizePolygons(raw?.unknownAreas),
     confidence: Number.isFinite(Number(raw?.confidence)) ? clamp(Number(raw.confidence) * 100) / 100 : undefined,
+    spaceConfidence: normalizeConfidenceMap(raw?.spaceConfidence),
     summary: typeof raw?.summary === "string" ? raw.summary.trim().slice(0, 900) : undefined,
   };
 }
@@ -162,6 +175,53 @@ function centroid(polygon: Point[]): Point {
   return [sum[0] / polygon.length, sum[1] / polygon.length];
 }
 
+function flipPointY(p: Point): Point {
+  return [p[0], 100 - p[1]];
+}
+
+function orientFrontToBottom(geometry: Geometry): Geometry {
+  const frontWords = ["parking", "carport", "driveway", "entry_platform", "entry steps", "front entry", "main entry", "entrance"];
+  const rearWords = ["rear", "outdoor_dining", "outdoor dining", "outdoor_sitting", "outdoor sitting", "garden terrace"];
+
+  const frontYs: number[] = [];
+  const rearYs: number[] = [];
+  for (const zone of geometry.attachedZones || []) {
+    const text = `${zone.kind || ""} ${zone.label || ""}`.toLowerCase();
+    const y = centroid(zone.polygon)[1];
+    if (frontWords.some((word) => text.includes(word))) frontYs.push(y);
+    if (rearWords.some((word) => text.includes(word))) rearYs.push(y);
+  }
+
+  const entryRooms = (geometry.rooms || []).filter((room) => {
+    const text = `${room.kind || ""} ${room.label || ""}`.toLowerCase();
+    return text.includes("entry") || text.includes("lobby");
+  });
+  entryRooms.forEach((room) => frontYs.push(centroid(room.polygon)[1]));
+
+  const avg = (values: number[]) => values.reduce((sum, value) => sum + value, 0) / Math.max(1, values.length);
+  const shouldFlip =
+    frontYs.length > 0 &&
+    ((rearYs.length > 0 && avg(frontYs) < avg(rearYs)) || (rearYs.length === 0 && avg(frontYs) < 42));
+
+  if (!shouldFlip) return geometry;
+
+  const flipPolygon = (item: PolygonItem): PolygonItem => ({ ...item, polygon: item.polygon.map(flipPointY) });
+  const flipSegment = (item: Segment): Segment => ({ ...item, a: flipPointY(item.a), b: flipPointY(item.b) });
+  const flipOpening = (item: Opening): Opening => ({ ...item, a: flipPointY(item.a), b: flipPointY(item.b) });
+
+  return {
+    ...geometry,
+    footprint: geometry.footprint.map(flipPointY),
+    attachedZones: (geometry.attachedZones || []).map(flipPolygon),
+    confirmedInteriorWalls: (geometry.confirmedInteriorWalls || []).map(flipSegment),
+    inferredInteriorWalls: (geometry.inferredInteriorWalls || []).map(flipSegment),
+    openings: (geometry.openings || []).map(flipOpening),
+    stairs: (geometry.stairs || []).map(flipPolygon),
+    rooms: (geometry.rooms || []).map(flipPolygon),
+    unknownAreas: (geometry.unknownAreas || []).map(flipPolygon),
+  };
+}
+
 function renderPlanSvg(geometry: Geometry, style: string, knownDimension: string, floor: string) {
   const width = 1300;
   const height = 980;
@@ -200,9 +260,9 @@ function renderPlanSvg(geometry: Geometry, style: string, knownDimension: string
     const c = map(centroid(zone.polygon));
     const label = esc(zone.label || zone.kind || "attached zone").toUpperCase();
     const kind = (zone.kind || "").toLowerCase();
-    const fill = kind.includes("parking") || kind.includes("carport") ? "#f3f3f3" : "#f7f7f7";
+    const fill = kind.includes("parking") || kind.includes("carport") || kind.includes("driveway") ? "#f0f0f0" : "#f7f7f7";
     return `<polygon points="${poly(zone.polygon)}" fill="${fill}" stroke="#777" stroke-width="3" stroke-dasharray="9 6"/>
-      <text x="${c[0].toFixed(1)}" y="${c[1].toFixed(1)}" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="18" fill="#666" font-weight="700">${label}</text>`;
+      <text x="${c[0].toFixed(1)}" y="${c[1].toFixed(1)}" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="17" fill="#666" font-weight="700">${label}</text>`;
   }).join("");
 
   const unknown = (geometry.unknownAreas || []).map((area) =>
@@ -260,8 +320,8 @@ function renderPlanSvg(geometry: Geometry, style: string, knownDimension: string
   const roomLabels = (geometry.rooms || []).map((room) => {
     const c = map(centroid(room.polygon));
     const label = esc(room.label || room.kind || "SPACE").toUpperCase();
-    const opacity = room.basis === "visible" ? "1" : "0.78";
-    return `<text x="${c[0].toFixed(1)}" y="${c[1].toFixed(1)}" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="19" fill="#333" font-weight="700" opacity="${opacity}">${label}</text>`;
+    const opacity = room.basis === "visible" || room.basis === "fact" ? "1" : "0.78";
+    return `<text x="${c[0].toFixed(1)}" y="${c[1].toFixed(1)}" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="18" fill="#333" font-weight="700" opacity="${opacity}">${label}</text>`;
   }).join("");
 
   const confidence = Math.round((geometry.confidence ?? 0.5) * 100);
@@ -314,12 +374,12 @@ async function runJointVision(params: {
         {
           role: "system",
           content:
-            "You are a multi-view architectural reconstruction engine. All supplied images show the same building. Cross-match facades and geometry before answering. Return final structured geometry only, never chain-of-thought.",
+            "You are a senior architect and multi-view reconstruction engine. All supplied images show one project. Cross-match masses, openings, entry, parking and outdoor spaces before answering. Distinguish visible evidence, user-confirmed facts and architectural inference. Return structured geometry only, never chain-of-thought.",
         },
         { role: "user", content },
       ],
       temperature: 0,
-      reasoning_effort: "low",
+      reasoning_effort: "medium",
       max_completion_tokens: params.maxTokens,
       chat_template_kwargs: { enable_thinking: false },
     }),
@@ -340,6 +400,14 @@ async function runJointVision(params: {
   return { ok: true, status: response.status, error: "", text: extractAssistantText(data), data };
 }
 
+function verifiedFactsText(facts: Record<string, string>) {
+  const entries = Object.entries(facts).filter(([, value]) => value && value !== "unknown");
+  if (!entries.length) return "No extra user-confirmed architect facts supplied.";
+  return `USER-CONFIRMED ARCHITECT FACTS (treat these as hard constraints unless physically impossible):\n${entries
+    .map(([key, value]) => `${key}: ${value}`)
+    .join("\n")}`;
+}
+
 export async function POST(request: Request) {
   try {
     const accountId = process.env.CLOUDFLARE_ACCOUNT_ID;
@@ -355,9 +423,22 @@ export async function POST(request: Request) {
     const knownDimension = String(form.get("knownDimension") || "").trim();
     const notes = String(form.get("notes") || "").trim();
     const previousGeometryRaw = String(form.get("previousGeometry") || "").trim();
+    const architectFactsRaw = String(form.get("architectFacts") || "{}").trim();
     const batchIndex = Math.max(0, Number(form.get("batchIndex") || 0));
     const batchCount = Math.max(1, Number(form.get("batchCount") || 1));
     const totalViews = Math.max(1, Number(form.get("totalViews") || 1));
+
+    let architectFacts: Record<string, string> = {};
+    try {
+      const parsed = JSON.parse(architectFactsRaw || "{}");
+      if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+        architectFacts = Object.fromEntries(
+          Object.entries(parsed).map(([key, value]) => [key, String(value || "unknown").toLowerCase()])
+        );
+      }
+    } catch {
+      architectFacts = {};
+    }
 
     const images: File[] = [];
     for (let index = 0; index < 8; index += 1) {
@@ -390,103 +471,185 @@ export async function POST(request: Request) {
       }
     }
 
-    const schema = `{
+    const endpoint = `https://api.cloudflare.com/client/v4/accounts/${encodeURIComponent(accountId)}/ai/v1/chat/completions`;
+    const factsText = verifiedFactsText(architectFacts);
+    const previousText = previousGeometry
+      ? `CANONICAL GEOMETRY FROM EARLIER IMAGE BATCHES:\n${JSON.stringify(previousGeometry)}\nRefine it only when these new views provide stronger evidence. Keep the same coordinate orientation.`
+      : "No previous batch geometry exists. Establish one canonical orientation now.";
+
+    const shellSchema = `{
   "footprint": [[x,y], ...],
-  "attachedZones": [{"kind":"parking|carport|covered_terrace|outdoor_dining|outdoor_sitting|entry_platform|other","label":"...","polygon":[[x,y],...],"confidence":0.0}],
-  "confirmedInteriorWalls": [{"a":[x,y],"b":[x,y],"confidence":0.0}],
-  "inferredInteriorWalls": [{"a":[x,y],"b":[x,y],"confidence":0.0}],
+  "attachedZones": [{"kind":"parking|carport|driveway|covered_terrace|outdoor_dining|outdoor_sitting|entry_platform|entry_steps|other","label":"...","polygon":[[x,y],...],"confidence":0.0}],
   "openings": [{"kind":"door|sliding_door|window|glazing|opening","a":[x,y],"b":[x,y],"confidence":0.0}],
   "stairs": [{"polygon":[[x,y],...],"confidence":0.0}],
-  "rooms": [{"label":"Kitchen|Living Area|Dining Area|Entry Lobby|WC|Stair|Other","polygon":[[x,y],...],"confidence":0.0,"basis":"visible|inferred"}],
-  "unknownAreas": [{"polygon":[[x,y],...],"reason":"..."}],
   "confidence": 0.0,
-  "summary": "short factual summary"
+  "summary": "short shell summary"
 }`;
 
-    const previousText = previousGeometry
-      ? `EXISTING CANONICAL GEOMETRY FROM EARLIER BATCHES:\n${JSON.stringify(previousGeometry)}\nRefine this geometry only where the new views provide stronger evidence. Keep the same coordinate orientation and do not restart with a generic footprint.`
-      : "There is no previous geometry. Establish one canonical orientation from all images in this batch.";
-
-    const prompt = [
-      `You are reconstructing ${floor} from ${totalViews} total 3D renders/screenshots of ONE real architectural project.`,
-      `This request is batch ${batchIndex + 1} of ${batchCount}. The images in THIS message must be inspected TOGETHER, not independently.`,
+    const shellPrompt = [
+      `PASS 1 OF 2: reconstruct ONLY the architectural shell/site relationship for ${floor}.`,
+      `This is batch ${batchIndex + 1} of ${batchCount}; ${totalViews} total project views exist. Inspect all images in THIS message together as one building.`,
       previousText,
-      "First cross-match the views using distinctive masses, balconies, canopies, glazing, blank walls, carport, entry steps and landscaping boundaries. Identify which visible facades connect to each other.",
-      "The main/front facade should face the BOTTOM of the final plan coordinate system when you can identify the entrance/driveway side. x increases left-to-right and y increases rear-to-front, all coordinates 0..100.",
-      "Reconstruct the ACTUAL stepped ground-contact shell. Do not simplify an L-shaped, recessed or projecting building into a rectangle.",
-      "Treat attached architectural/site spaces that materially define the plan separately: parking/carport, covered outdoor dining, outdoor sitting terraces, entry platform/steps and similar zones.",
-      "Use openings as hard constraints. Large glazing usually belongs to living/dining zones; service windows/blank walls constrain kitchen/WC/service placement; main entry constrains lobby and stairs.",
-      accuracyMode === "strict"
-        ? "STRICT MODE: only draw interior walls/rooms directly supported by visible interior evidence. Unknown hidden zones must stay in unknownAreas."
-        : "FULL RECONSTRUCTION MODE: infer a complete practical interior layout, but every inferred wall/room must respect the shell, openings, entrance, stairs, carport and outdoor-zone evidence. Do not invent an unrelated generic house plan.",
-      knownDimension ? `VERIFIED DIMENSION: ${knownDimension}. Use it as the only trusted scale clue.` : "No verified dimension was supplied. Preserve proportions rather than inventing measurements.",
-      notes ? `ARCHITECT NOTES: ${notes}` : "No architect notes supplied.",
-      "Return ONLY one valid JSON object. No markdown, no prose outside JSON.",
-      "Required schema:",
-      schema,
+      factsText,
+      "Do not infer room names yet. First solve the outside geometry correctly.",
+      "Cross-match facades using unique balconies, canopies, blank walls, glazing bands, vertical volumes, parapets, planting boundaries and level changes.",
+      "Identify the road/driveway/main-entry side as FRONT. In final coordinates FRONT MUST be toward y=100 (the bottom of the drawing); REAR/GARDEN toward y=0 (top).",
+      "Reconstruct the exact stepped ground-contact footprint: recesses, projections, narrow links and wings matter. Never simplify an irregular building to a rectangle.",
+      "Separate attached spaces that are not enclosed interior floor area: parking/carport/driveway, covered outdoor dining, outdoor sitting terrace, entry platform/steps and similar zones.",
+      "Map visible doors, sliding doors, windows and large glazing onto the correct facade. Openings are hard constraints for the later interior pass.",
+      "If a stair/vertical core is actually visible or strongly identified by a user fact, include its approximate polygon. Otherwise omit it here.",
+      knownDimension ? `VERIFIED SCALE CLUE: ${knownDimension}. Do not invent any other dimensions.` : "No verified scale clue. Preserve relative proportions only.",
+      notes ? `ARCHITECT NOTES: ${notes}` : "No free-text architect notes supplied.",
+      "Coordinates must be 0..100, x left-to-right, y rear-to-front. Return JSON only.",
+      "SCHEMA:",
+      shellSchema,
     ].join("\n");
 
-    const endpoint = `https://api.cloudflare.com/client/v4/accounts/${encodeURIComponent(accountId)}/ai/v1/chat/completions`;
-    let result = await runJointVision({ endpoint, apiToken, prompt, dataUrls, maxTokens: 2400 });
-
-    if (!result.ok) {
-      console.error("Joint multi-view request failed:", result.data);
-      return NextResponse.json({ error: result.error }, { status: result.status });
+    let shellResult = await runJointVision({ endpoint, apiToken, prompt: shellPrompt, dataUrls, maxTokens: 1900 });
+    if (!shellResult.ok) {
+      console.error("Shell pass failed:", shellResult.data);
+      return NextResponse.json({ error: shellResult.error }, { status: shellResult.status });
     }
 
-    let geometry = normalizeGeometry(parseJsonObject(result.text) || {});
-
-    if (!geometry) {
-      const retryPrompt = [
-        "Return the reconstruction again as VALID JSON ONLY.",
-        "Do not describe the images. Do not return markdown.",
-        "All images show the same building and must be cross-matched together.",
-        previousGeometry ? `Preserve/refine this prior geometry: ${JSON.stringify(previousGeometry)}` : "Establish the shell from the supplied views.",
-        accuracyMode === "strict" ? "Do not invent hidden interior geometry." : "Infer a complete layout only within the evidence-supported shell.",
-        "Schema:",
-        schema,
+    let shellRaw = parseJsonObject(shellResult.text);
+    let shellGeometry = normalizeGeometry(shellRaw || {});
+    if (!shellGeometry) {
+      const shellRetry = [
+        "Return VALID JSON ONLY for the shell. No prose.",
+        "Use all supplied images together. Front/driveway/main-entry side must map toward y=100.",
+        previousGeometry ? `Refine this existing geometry instead of restarting: ${JSON.stringify(previousGeometry)}` : "Establish the real stepped shell.",
+        factsText,
+        "Schema:", shellSchema,
       ].join("\n");
-      result = await runJointVision({ endpoint, apiToken, prompt: retryPrompt, dataUrls, maxTokens: 2000 });
-      if (result.ok) geometry = normalizeGeometry(parseJsonObject(result.text) || {});
+      shellResult = await runJointVision({ endpoint, apiToken, prompt: shellRetry, dataUrls, maxTokens: 1600 });
+      shellRaw = shellResult.ok ? parseJsonObject(shellResult.text) : null;
+      shellGeometry = normalizeGeometry(shellRaw || {});
     }
 
-    if (!geometry) {
-      console.error("Joint vision returned unusable geometry:", {
-        finishReason: result.data?.choices?.[0]?.finish_reason,
-        preview: result.text?.slice(0, 600),
-      });
+    if (!shellGeometry || !shellRaw) {
       return NextResponse.json(
-        { error: "The multi-view model could not produce reliable geometry from this batch. Try clearer opposite-side views." },
+        { error: "The AI could not establish a reliable building shell from these views." },
         { status: 422 }
       );
     }
 
+    const interiorSchema = `{
+  "confirmedInteriorWalls": [{"a":[x,y],"b":[x,y],"confidence":0.0}],
+  "inferredInteriorWalls": [{"a":[x,y],"b":[x,y],"confidence":0.0}],
+  "rooms": [{"kind":"kitchen|living|dining|entry_lobby|wc|stair|service|storage|other","label":"Kitchen|Living Area|Dining Area|Entry Lobby|WC|Stair|...","polygon":[[x,y],...],"confidence":0.0,"basis":"visible|fact|inferred"}],
+  "unknownAreas": [{"polygon":[[x,y],...],"reason":"..."}],
+  "spaceConfidence": {"parking":0.0,"entry":0.0,"stairs":0.0,"kitchen":0.0,"living":0.0,"dining":0.0,"wc":0.0,"outdoor":0.0},
+  "confidence": 0.0,
+  "summary": "short interior reasoning result"
+}`;
+
+    const lockedShell = {
+      footprint: shellGeometry.footprint,
+      attachedZones: shellGeometry.attachedZones || [],
+      openings: shellGeometry.openings || [],
+      stairs: shellGeometry.stairs || [],
+    };
+
+    const interiorPrompt = [
+      `PASS 2 OF 2: reconstruct the interior of ${floor} INSIDE A LOCKED SHELL.`,
+      "The shell below is canonical. Do not rotate it, replace it, rectangularize it or move its exterior openings.",
+      `LOCKED SHELL: ${JSON.stringify(lockedShell)}`,
+      factsText,
+      notes ? `ARCHITECT NOTES: ${notes}` : "No free-text architect notes supplied.",
+      accuracyMode === "strict"
+        ? "EVIDENCE ONLY: add only interior walls/spaces supported by visible interior/cutaway evidence or explicit user-confirmed facts. Put the rest in unknownAreas."
+        : "FULL RECONSTRUCTION: infer the most plausible complete ground-floor arrangement from architecture, but do not create a generic plan. Every space must be explained by the actual shell, openings, entry, stair clues, parking and outdoor zones.",
+      "ARCHITECTURAL ADJACENCY RULES (soft rules, never stronger than visible evidence or user facts):",
+      "- Main entry should lead into entry lobby/circulation, usually near the stair/vertical core when that core is evident.",
+      "- Parking/carport should have a plausible pedestrian connection toward entry or a service/kitchen side, not through the middle of living furniture.",
+      "- Kitchen should relate logically to dining and, when an outdoor dining terrace exists, should preferably connect or sit adjacent to it.",
+      "- Living/dining zones are usually aligned with the largest garden-facing glazing and outdoor sitting terraces.",
+      "- A ground-floor WC, if confirmed or strongly inferred, should be compact and accessible from circulation, not placed inside living/dining/kitchen.",
+      "- Open-plan facts mean avoid unnecessary partitions between kitchen/living/dining; closed-plan facts mean use real separating walls.",
+      "- Stair position is a circulation anchor. Do not move it merely to make rooms look neat.",
+      "- Room polygons must stay inside the footprint, avoid impossible overlaps, and align walls with each other where practical.",
+      "Use basis=visible for directly seen evidence, basis=fact for user-confirmed facts, basis=inferred for architectural inference.",
+      "Return JSON only, coordinates in the SAME 0..100 system as the locked shell.",
+      "SCHEMA:",
+      interiorSchema,
+    ].join("\n");
+
+    let interiorResult = await runJointVision({ endpoint, apiToken, prompt: interiorPrompt, dataUrls, maxTokens: 2300 });
+    if (!interiorResult.ok) {
+      console.error("Interior pass failed:", interiorResult.data);
+      return NextResponse.json({ error: interiorResult.error }, { status: interiorResult.status });
+    }
+
+    let interiorRaw = parseJsonObject(interiorResult.text);
+    if (!interiorRaw) {
+      const interiorRetry = [
+        "Return VALID JSON ONLY for the interior. No markdown or explanation.",
+        `LOCKED SHELL: ${JSON.stringify(lockedShell)}`,
+        factsText,
+        accuracyMode === "strict" ? "Do not invent hidden spaces." : "Infer a complete plausible plan constrained by the locked shell.",
+        "Schema:", interiorSchema,
+      ].join("\n");
+      interiorResult = await runJointVision({ endpoint, apiToken, prompt: interiorRetry, dataUrls, maxTokens: 1900 });
+      interiorRaw = interiorResult.ok ? parseJsonObject(interiorResult.text) : null;
+    }
+
+    if (!interiorRaw) {
+      return NextResponse.json(
+        { error: "The AI established the shell but could not reconstruct the interior reliably." },
+        { status: 422 }
+      );
+    }
+
+    const combinedRaw: AnyRecord = {
+      ...shellRaw,
+      ...interiorRaw,
+      footprint: shellGeometry.footprint,
+      attachedZones: shellGeometry.attachedZones || [],
+      openings: shellGeometry.openings || [],
+      stairs: (interiorRaw?.stairs && Array.isArray(interiorRaw.stairs) ? interiorRaw.stairs : shellGeometry.stairs) || [],
+    };
+
+    let geometry = normalizeGeometry(combinedRaw);
+    if (!geometry) {
+      return NextResponse.json({ error: "The reconstructed geometry was incomplete." }, { status: 422 });
+    }
+
     if (accuracyMode === "strict") {
       geometry.inferredInteriorWalls = [];
-      geometry.rooms = (geometry.rooms || []).filter((room) => room.basis === "visible");
+      geometry.rooms = (geometry.rooms || []).filter((room) => room.basis === "visible" || room.basis === "fact");
     }
+
+    geometry = orientFrontToBottom(geometry);
 
     const svg = renderPlanSvg(geometry, planStyle, knownDimension, floor);
     const image = svgDataUri(svg);
-    const confidencePercent = Math.round((geometry.confidence ?? 0.5) * 100);
+    const confidencePercent = Math.round((geometry.confidence ?? shellGeometry.confidence ?? 0.5) * 100);
+
+    const confidenceHighlights = Object.entries(geometry.spaceConfidence || {})
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 4)
+      .map(([key, value]) => `${key} ${Math.round(value * 100)}%`)
+      .join(", ");
+
     const report = [
-      geometry.summary || "Joint multi-view geometry reconstructed.",
+      geometry.summary || shellGeometry.summary || "Smart two-pass architectural reconstruction completed.",
       `${geometry.footprint.length} shell vertices`,
       `${geometry.attachedZones?.length || 0} attached/site zones`,
       `${geometry.openings?.length || 0} supported openings`,
-      `${geometry.rooms?.length || 0} room zones`,
-    ].join(" · ");
+      `${geometry.rooms?.length || 0} reconstructed spaces`,
+      confidenceHighlights ? `space confidence: ${confidenceHighlights}` : "",
+    ].filter(Boolean).join(" · ");
 
     return NextResponse.json({
       geometry,
       image,
       report,
       confidence: `${confidencePercent}% geometry confidence`,
-      provider: "cloudflare-qwen-multiview",
+      provider: "cloudflare-qwen-smart-architect",
       format: "svg",
     });
   } catch (error) {
-    console.error("ArchiNova joint reconstruction error:", error);
+    console.error("ArchiNova smart reconstruction error:", error);
     return NextResponse.json(
       { error: "Something went wrong while reconstructing the project." },
       { status: 500 }
