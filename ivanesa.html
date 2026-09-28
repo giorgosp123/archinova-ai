@@ -18,8 +18,33 @@ header{position:sticky;top:0;z-index:5;padding:14px 16px;background:rgba(250,248
 .box{background:#fff;border:1px solid var(--line);border-radius:18px;padding:14px;margin-top:16px}.row{display:flex;justify-content:space-between;align-items:center;gap:10px}.btn{border:0;border-radius:13px;padding:11px 12px;font-weight:850;background:var(--p);color:#fff}.btn2{background:#f3f4f6;color:#374151}.status{font-size:11px;color:var(--muted)}
 .reward{display:flex;justify-content:space-between;gap:10px;background:#fff;border:1px solid var(--line);border-radius:16px;padding:13px;margin-bottom:8px}.reward.on{background:#fffbeb;border-color:#fde68a}.need{font-size:12px;color:var(--muted);white-space:nowrap}
 @media(max-width:390px){.name{font-size:22px}.stars{font-size:28px}.wrap{padding-left:10px;padding-right:10px}}
+
+/* Stitch-inspired background only — logic untouched */
+body{background:
+  radial-gradient(circle at 20% 8%,rgba(255,255,255,.72),transparent 26%),
+  radial-gradient(circle at 82% 12%,rgba(255,181,222,.24),transparent 22%),
+  linear-gradient(180deg,#dff7ff 0%,#e9ecff 48%,#fff0fb 100%)!important;
+  position:relative;overflow-x:hidden}
+header{background:rgba(235,248,255,.9)!important;border-bottom:1px solid #cbe6f9!important}
+.hero{background:linear-gradient(135deg,#4ba7f5,#7288f5,#b286f3)!important;box-shadow:0 14px 36px rgba(66,135,220,.22)!important}
+.card,.task,.reward,.box{background:rgba(255,255,255,.90)!important;border-color:#d8e8f6!important;backdrop-filter:blur(6px)}
+.day{background:#eef7ff!important;color:#42668a!important}.day.active{background:#56a9f2!important;color:white!important}
+.badge{background:#edf6ff!important;color:#377bb6!important}
+.theme-bg{position:fixed;inset:0;pointer-events:none;z-index:0;overflow:hidden;opacity:.20}
+.theme-bg span{position:absolute;font-size:30px;text-shadow:0 0 16px rgba(71,147,229,.25)}
+.theme-bg .i1{top:8%;left:4%;font-size:38px}.theme-bg .i2{top:16%;right:5%;font-size:34px}
+.theme-bg .i3{top:33%;left:3%;font-size:36px}.theme-bg .i4{top:46%;right:4%;font-size:34px}
+.theme-bg .i5{top:62%;left:5%;font-size:40px}.theme-bg .i6{top:76%;right:3%;font-size:35px}
+.theme-bg .i7{top:89%;left:38%;font-size:32px}
+.stitch-ear{display:inline-block;width:52px;height:28px;border-radius:50% 50% 45% 45%;background:#54a9f2;transform:rotate(-8deg);position:relative;opacity:.75}
+.stitch-ear:before,.stitch-ear:after{content:"";position:absolute;top:-8px;width:22px;height:38px;background:#54a9f2;border-radius:70% 30% 70% 30%}
+.stitch-ear:before{left:-14px;transform:rotate(-38deg)}.stitch-ear:after{right:-14px;transform:scaleX(-1) rotate(-38deg)}
+header,main{position:relative;z-index:1}
+
 </style></head>
-<body><header><div class="head"><h1>Ιβανέσα ⭐</h1><div class="muted">Η δική μου εβδομάδα • μόνο προβολή</div></div></header>
+<body><div class="theme-bg" aria-hidden="true">
+<span class="i1">🌺</span><span class="i2">💙</span><span class="i3">🐾</span><span class="i4">✨</span><span class="i5"><i class="stitch-ear"></i></span><span class="i6">🌸</span><span class="i7">💜</span>
+</div><header><div class="head"><h1>Ιβανέσα ⭐</h1><div class="muted">Η δική μου εβδομάδα • μόνο προβολή</div></div></header>
 <main class="wrap">
 <section class="hero"><div class="heroTop"><div><div class="muted" style="color:#eee">Μπράβο Ιβανέσα! ✨</div><div class="name">Τα αστεράκια μου</div></div><div><div class="stars" id="ws">0 ★</div><div class="muted" style="color:#eee;text-align:right">αυτή την εβδομάδα</div></div></div><div class="progress"><div class="bar" id="bar"></div></div><div class="heroFoot"><span id="wk">—</span><span id="pct">0%</span></div></section>
 <div class="cards"><div class="card"><div class="n" id="td">0</div><div class="l">★ σήμερα</div></div><div class="card"><div class="n" id="left">0</div><div class="l">μένουν σήμερα</div></div><div class="card"><div class="n">60</div><div class="l">στόχος</div></div></div>
