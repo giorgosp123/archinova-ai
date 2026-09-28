@@ -97,6 +97,8 @@ h1{margin:0;font-size:23px;font-weight:950;letter-spacing:-.4px}
   flex:0 0 auto;cursor:pointer
 }
 .task.done .starBtn{background:#fff2b7}
+.starBtn{display:flex;align-items:center;justify-content:center;padding:0;color:#303746}
+.starSvg{width:28px;height:28px;display:block}
 .empty{background:#fff;border:1px dashed #d8d7de;border-radius:18px;padding:18px;text-align:center;color:var(--muted);font-size:12px}
 .bottomGrid{display:grid;grid-template-columns:1fr;gap:10px;margin-top:20px}
 .panel{background:rgba(255,255,255,.94);border:1px solid var(--line);border-radius:20px;padding:14px}
@@ -246,6 +248,7 @@ h1{margin:0;font-size:23px;font-weight:950;letter-spacing:-.4px}
   const today=(new Date().getDay()+6)%7;
 
   const key=(d,i)=>d+":"+i;
+function starSvg(filled){return '<svg class="starSvg" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2.7l2.86 5.8 6.4.93-4.63 4.51 1.09 6.37L12 17.32l-5.72 3.01 1.09-6.37-4.63-4.51 6.4-.93L12 2.7z" fill="'+(filled?'#F7C948':'none')+'" stroke="'+(filled?'#E0A800':'currentColor')+'" stroke-width="1.8" stroke-linejoin="round"/></svg>'}
 
   function dayStats(d){
     let total=0,done=0;
@@ -383,7 +386,7 @@ h1{margin:0;font-size:23px;font-weight:950;letter-spacing:-.4px}
             "<div class='taskName'>"+t[1]+"</div>"+
             (t[3]?"<div class='taskNote'>"+t[3]+"</div>":"")+
           "</div>"+
-          "<button class='starBtn' aria-label='Βαθμολόγηση'>"+(done?"⭐":"☆")+"</button>";
+          "<button class='starBtn' aria-label='Βαθμολόγηση'>"+starSvg(done)+"</button>";
         row.querySelector(".starBtn").onclick=()=>toggleTask(i);
         el.tasks.appendChild(row);
       });
