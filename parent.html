@@ -1,0 +1,405 @@
+<!doctype html>
+<html lang="el">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#f7f5ff">
+<title>Πρόγραμμα Αστεριών — Γονέας</title>
+<style>
+:root{
+  --ink:#202532;--muted:#747b8c;--line:#e8e7ef;--card:#fff;
+  --purple:#7c3aed;--purple2:#a56cf5;--blue:#4e9cf5;--green:#27ae60;
+  --bg:#f8f7fc;
+}
+*{box-sizing:border-box}
+html,body{margin:0;min-height:100%;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Arial,sans-serif;color:var(--ink)}
+body{
+  background:
+    radial-gradient(circle at 7% 8%,rgba(124,58,237,.08),transparent 22%),
+    radial-gradient(circle at 92% 12%,rgba(78,156,245,.08),transparent 20%),
+    linear-gradient(180deg,#f8f7fc 0%,#fff 44%,#fffaf0 100%);
+}
+button,a{font:inherit;-webkit-tap-highlight-color:transparent}
+header{
+  position:sticky;top:0;z-index:20;
+  padding:calc(12px + env(safe-area-inset-top)) 16px 12px;
+  background:rgba(248,247,252,.9);
+  backdrop-filter:blur(16px);
+  border-bottom:1px solid rgba(232,231,239,.9)
+}
+.head,.wrap{max-width:760px;margin:auto}
+.headTop{display:flex;justify-content:space-between;align-items:center;gap:12px}
+h1{margin:0;font-size:23px;font-weight:950;letter-spacing:-.4px}
+.subtitle{margin-top:3px;font-size:12px;color:var(--muted)}
+.onlinePill{display:flex;align-items:center;gap:6px;padding:7px 9px;border-radius:999px;background:#fff;border:1px solid var(--line);font-size:11px;font-weight:800;color:#5f6677;white-space:nowrap}
+.dot{width:8px;height:8px;border-radius:50%;background:#c9cbd2}
+.onlinePill.ok .dot{background:#2ecc71;box-shadow:0 0 0 4px rgba(46,204,113,.1)}
+.onlinePill.err .dot{background:#ef4444}
+.wrap{padding:16px 14px calc(42px + env(safe-area-inset-bottom))}
+.tabs{display:grid;grid-template-columns:1fr 1fr;gap:9px;margin-bottom:14px}
+.tab{
+  border:1px solid var(--line);background:rgba(255,255,255,.9);
+  border-radius:18px;padding:13px 10px;font-size:15px;font-weight:900;color:#71788a;
+  transition:.18s ease
+}
+.tab.active.anelya{background:linear-gradient(135deg,#27202f,#68408a);color:#fff;border-color:transparent;box-shadow:0 8px 22px rgba(78,43,99,.18)}
+.tab.active.ivanesa{background:linear-gradient(135deg,#4f9eea,#8c81f2);color:#fff;border-color:transparent;box-shadow:0 8px 22px rgba(78,156,245,.2)}
+.hero{
+  position:relative;overflow:hidden;border-radius:26px;padding:19px;color:#fff;
+  box-shadow:0 16px 34px rgba(87,59,159,.18);margin-bottom:12px;
+  transition:.22s ease
+}
+.hero.anelya{background:linear-gradient(135deg,#2a2231,#60407a,#8a58ae)}
+.hero.ivanesa{background:linear-gradient(135deg,#4a9fe9,#7189ee,#b184ed)}
+.hero:after{
+  content:"★";position:absolute;right:-10px;bottom:-38px;font-size:145px;opacity:.08;transform:rotate(-12deg)
+}
+.heroTop{display:flex;justify-content:space-between;gap:12px;position:relative;z-index:1}
+.eyebrow{font-size:12px;opacity:.88;font-weight:750}
+.childName{font-size:29px;font-weight:950;line-height:1.05;margin-top:4px}
+.stars{font-size:35px;font-weight:950;line-height:1;text-align:right}
+.starLabel{text-align:right;font-size:11px;opacity:.84;margin-top:5px}
+.progress{height:11px;background:rgba(255,255,255,.23);border-radius:999px;overflow:hidden;margin-top:16px;position:relative;z-index:1}
+.bar{height:100%;width:0;background:#fff;border-radius:999px;transition:width .25s ease}
+.heroFoot{display:flex;justify-content:space-between;font-size:11px;opacity:.9;margin-top:7px;position:relative;z-index:1}
+.quickLinks{display:grid;grid-template-columns:1fr 1fr;gap:9px;margin:12px 0}
+.quick{
+  text-decoration:none;color:var(--ink);background:rgba(255,255,255,.92);border:1px solid var(--line);
+  border-radius:18px;padding:12px 13px;display:flex;align-items:center;gap:10px;min-height:62px
+}
+.quickIcon{width:36px;height:36px;border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:19px;flex:0 0 auto}
+.quick.anelya .quickIcon{background:#efe8f4}.quick.ivanesa .quickIcon{background:#e5f4ff}
+.quickTitle{font-size:13px;font-weight:900}.quickNote{font-size:10px;color:var(--muted);margin-top:2px}
+.stats{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:0 0 16px}
+.stat{background:rgba(255,255,255,.93);border:1px solid var(--line);border-radius:19px;padding:12px 8px;text-align:center}
+.statNum{font-size:22px;font-weight:950;line-height:1}.statLab{font-size:10px;color:var(--muted);margin-top:5px}
+.sectionHead{display:flex;justify-content:space-between;align-items:end;gap:10px;margin:18px 2px 9px}
+.sectionHead h2{font-size:17px;margin:0;font-weight:950}.sectionHead small{font-size:10px;color:var(--muted)}
+.days{display:grid;grid-template-columns:repeat(7,1fr);gap:5px;margin-bottom:12px}
+.day{
+  border:0;border-radius:14px;padding:10px 2px;background:#f0eff4;color:#767d8c;
+  font-size:10px;font-weight:900
+}
+.day.active{background:#272b35;color:#fff}
+.day.today:not(.active){box-shadow:inset 0 0 0 1px #b7b1c6}
+.category{display:flex;align-items:center;justify-content:space-between;margin:17px 2px 8px}
+.category h3{font-size:15px;margin:0;font-weight:900}
+.badge{font-size:10px;padding:5px 8px;border-radius:999px;background:#f1eef8;color:#6f56a3;font-weight:800}
+.task{
+  display:flex;align-items:center;gap:12px;background:rgba(255,255,255,.94);
+  border:1px solid var(--line);border-radius:18px;padding:12px;margin-bottom:8px;
+  transition:.15s ease
+}
+.task.done{background:#f3fdf6;border-color:#c9efd3}
+.taskText{flex:1;min-width:0}.taskName{font-size:13px;font-weight:850;line-height:1.25}.taskNote{font-size:10px;color:var(--muted);margin-top:3px}
+.starBtn{
+  width:48px;height:48px;border:0;border-radius:15px;background:#f2f3f6;font-size:23px;
+  flex:0 0 auto;cursor:pointer
+}
+.task.done .starBtn{background:#fff2b7}
+.empty{background:#fff;border:1px dashed #d8d7de;border-radius:18px;padding:18px;text-align:center;color:var(--muted);font-size:12px}
+.bottomGrid{display:grid;grid-template-columns:1fr;gap:10px;margin-top:20px}
+.panel{background:rgba(255,255,255,.94);border:1px solid var(--line);border-radius:20px;padding:14px}
+.panelTop{display:flex;align-items:center;justify-content:space-between;gap:12px}
+.panelTitle{font-size:14px;font-weight:950}.panelText{font-size:11px;color:var(--muted);margin-top:4px;line-height:1.4}
+.softBtn{border:0;border-radius:13px;padding:10px 11px;background:#f1f1f4;color:#414755;font-size:11px;font-weight:900;white-space:nowrap}
+.statusLine{font-size:10px;color:var(--muted);margin-top:9px}
+@media(min-width:620px){.bottomGrid{grid-template-columns:1fr 1fr}}
+@media(max-width:390px){
+  .wrap{padding-left:10px;padding-right:10px}.childName{font-size:27px}.stars{font-size:32px}
+  .quick{padding:10px}.quickIcon{width:33px;height:33px}.quickNote{display:none}
+}
+</style>
+</head>
+<body>
+<header>
+  <div class="head">
+    <div class="headTop">
+      <div>
+        <h1>Πρόγραμμα Αστεριών ⭐</h1>
+        <div class="subtitle">Γονικό dashboard • εδώ βάζεις τις βαθμολογίες</div>
+      </div>
+      <div class="onlinePill" id="onlinePill"><span class="dot"></span><span id="onlineText">Σύνδεση</span></div>
+    </div>
+  </div>
+</header>
+
+<main class="wrap">
+  <div class="tabs">
+    <button class="tab anelya active" id="tabAnelya">Ανέλυα</button>
+    <button class="tab ivanesa" id="tabIvanesa">Ιβανέσα</button>
+  </div>
+
+  <section class="hero anelya" id="hero">
+    <div class="heroTop">
+      <div>
+        <div class="eyebrow">Τρέχουσα εβδομάδα</div>
+        <div class="childName" id="childName">Ανέλυα</div>
+      </div>
+      <div>
+        <div class="stars" id="weeklyStars">0 ★</div>
+        <div class="starLabel">σύνολο</div>
+      </div>
+    </div>
+    <div class="progress"><div class="bar" id="progressBar"></div></div>
+    <div class="heroFoot"><span id="weekLabel">—</span><span id="progressText">0%</span></div>
+  </section>
+
+  <div class="quickLinks">
+    <a class="quick anelya" href="./anelya.html">
+      <div class="quickIcon">🖤</div>
+      <div><div class="quickTitle">Σελίδα Ανέλυας</div><div class="quickNote">Wednesday theme • μόνο προβολή</div></div>
+    </a>
+    <a class="quick ivanesa" href="./ivanesa.html">
+      <div class="quickIcon">💙</div>
+      <div><div class="quickTitle">Σελίδα Ιβανέσας</div><div class="quickNote">Stitch theme • μόνο προβολή</div></div>
+    </a>
+  </div>
+
+  <div class="stats">
+    <div class="stat"><div class="statNum" id="todayDone">0</div><div class="statLab">★ σήμερα</div></div>
+    <div class="stat"><div class="statNum" id="todayLeft">0</div><div class="statLab">μένουν σήμερα</div></div>
+    <div class="stat"><div class="statNum">60</div><div class="statLab">στόχος εβδομάδας</div></div>
+  </div>
+
+  <div class="sectionHead">
+    <div><h2>Βαθμολόγηση ημέρας</h2><small>Πάτησε ☆ για να δώσεις αστεράκι</small></div>
+    <small id="selectedDayLabel"></small>
+  </div>
+
+  <div class="days" id="days"></div>
+  <div id="tasks"></div>
+
+  <div class="bottomGrid">
+    <section class="panel">
+      <div class="panelTop">
+        <div>
+          <div class="panelTitle">🔒 PIN γονέα</div>
+          <div class="panelText">Ζητείται μόνο όταν βάζεις ή αφαιρείς ★.</div>
+        </div>
+        <button class="softBtn" id="clearPinBtn">Καθάρισε PIN</button>
+      </div>
+      <div class="statusLine" id="statusText">Σύνδεση…</div>
+    </section>
+
+    <section class="panel">
+      <div class="panelTitle">🗓️ Αυτόματη νέα εβδομάδα</div>
+      <div class="panelText">Κάθε Δευτέρα ξεκινά νέα εβδομάδα με 0 ★. Τα προηγούμενα αποτελέσματα μένουν αποθηκευμένα.</div>
+    </section>
+  </div>
+</main>
+
+<script>
+(function(){
+  const API="https://annzsqojhqmxwsascarz.supabase.co/functions/v1/family-stars-api";
+  const DAYS=["Δευ","Τρι","Τετ","Πεμ","Παρ","Σαβ","Κυρ"];
+  const FULL=["Δευτέρα","Τρίτη","Τετάρτη","Πέμπτη","Παρασκευή","Σάββατο","Κυριακή"];
+  const TASKS=[
+    ["🌅 Πρωί","Στρώνω το κρεβάτι μου",[0,1,2,3,4,5,6],""],
+    ["🌅 Πρωί","Διπλώνω τις πιτζάμες και τις βάζω στη θέση τους",[0,1,2,3,4,5,6],""],
+    ["🌅 Πρωί","Πλένω δόντια",[0,1,2,3,4,5,6],""],
+    ["🌅 Πρωί","Πλένω πρόσωπο / χέρια",[0,1,2,3,4,5,6],""],
+    ["🌅 Πρωί","Παπούτσια / παντόφλες στη θέση τους",[0,1,2,3,4,5,6],""],
+    ["🎒 Μετά το σχολείο","Βάζω τσάντα και παπούτσια στη θέση τους",[0,1,2,3,4],"Σχολικές μέρες"],
+    ["🎒 Μετά το σχολείο","Πλένω χέρια πριν το φαγητό",[0,1,2,3,4,5,6],""],
+    ["🎒 Μετά το σχολείο","Τακτοποιώ τα καθαρά ρούχα",[0,1,2,3,4,5,6],""],
+    ["🎒 Μετά το σχολείο","Βάζω τα λερωμένα ρούχα στο καλάθι / πλυντήριο",[0,1,2,3,4,5,6],""],
+    ["📚 Μελέτη","Κάνω τα μαθήματά μου μετά την ξεκούραση",[0,1,2,3,4],"Μετά από 30–45 λεπτά ξεκούραση"],
+    ["📱 Χρόνος","Κινητό / internet μόνο στον συμφωνημένο χρόνο",[0,1,2,3,4,5,6],""],
+    ["👕 Ρούχα","Μαζεύω καθαρά ρούχα από την απλώστρα όταν υπάρχουν",[0,1,2,3,4,5,6],""],
+    ["🧸 Τακτοποίηση","Μαζεύω παιχνίδια και κρατώ το δωμάτιο τακτοποιημένο",[0,1,2,3,4,5,6],""],
+    ["🛁 Βράδυ","Κάνω μπάνιο",[0,1,2,3,4,5,6],""],
+    ["🛁 Βράδυ","Λούζω τα μαλλιά",[0,2,5],"Δευτέρα • Τετάρτη • Σάββατο"],
+    ["🛁 Βράδυ","Πλένω δόντια",[0,1,2,3,4,5,6],""],
+    ["🎒 Βράδυ","Ετοιμάζω ρούχα / πράγματα για αύριο",[0,1,2,3,4],"Σχολικές μέρες"],
+    ["🧹 Σπίτι","Σκούπα + σφουγγάρισμα / βοήθεια",[0,2,5],"Δευτέρα • Τετάρτη • Σάββατο — ή όταν χρειάζεται"]
+  ];
+
+  const el={
+    tabA:document.getElementById("tabAnelya"),
+    tabI:document.getElementById("tabIvanesa"),
+    hero:document.getElementById("hero"),
+    childName:document.getElementById("childName"),
+    weeklyStars:document.getElementById("weeklyStars"),
+    progressBar:document.getElementById("progressBar"),
+    weekLabel:document.getElementById("weekLabel"),
+    progressText:document.getElementById("progressText"),
+    todayDone:document.getElementById("todayDone"),
+    todayLeft:document.getElementById("todayLeft"),
+    selectedDayLabel:document.getElementById("selectedDayLabel"),
+    days:document.getElementById("days"),
+    tasks:document.getElementById("tasks"),
+    clearPinBtn:document.getElementById("clearPinBtn"),
+    statusText:document.getElementById("statusText"),
+    onlinePill:document.getElementById("onlinePill"),
+    onlineText:document.getElementById("onlineText")
+  };
+
+  if(localStorage.getItem("familyParentPin")==="7314"){
+    localStorage.removeItem("familyParentPin");
+  }
+
+  let child="anelya";
+  let selected=(new Date().getDay()+6)%7;
+  let marks=new Set();
+  let weekStart="";
+  const today=(new Date().getDay()+6)%7;
+
+  const key=(d,i)=>d+":"+i;
+
+  function dayStats(d){
+    let total=0,done=0;
+    TASKS.forEach((t,i)=>{
+      if(t[2].includes(d)){
+        total++;
+        if(marks.has(key(d,i))) done++;
+      }
+    });
+    return {total,done};
+  }
+
+  function weekText(s){
+    if(!s) return "—";
+    const d=new Date(s+"T00:00:00");
+    const e=new Date(d);
+    e.setDate(e.getDate()+6);
+    const fmt=x=>x.toLocaleDateString("el-GR",{day:"numeric",month:"short"});
+    return fmt(d)+" – "+fmt(e);
+  }
+
+  function setConnection(type,text){
+    el.onlinePill.classList.remove("ok","err");
+    if(type) el.onlinePill.classList.add(type);
+    el.onlineText.textContent=text;
+  }
+
+  async function load(){
+    setConnection("","Σύνδεση");
+    el.statusText.textContent="Ενημέρωση δεδομένων…";
+    try{
+      const r=await fetch(API+"?child="+child+"&t="+Date.now(),{cache:"no-store"});
+      const j=await r.json();
+      if(!r.ok) throw new Error(j.error||"error");
+      marks=new Set((j.marks||[]).filter(x=>x.done).map(x=>key(x.day_index,x.task_id)));
+      weekStart=j.week_start||"";
+      setConnection("ok","Online");
+      el.statusText.textContent="Τελευταία ενημέρωση "+new Date().toLocaleTimeString("el-GR",{hour:"2-digit",minute:"2-digit"});
+      render();
+    }catch(err){
+      setConnection("err","Offline");
+      el.statusText.textContent="Δεν έγινε σύνδεση. Δοκίμασε ξανά σε λίγο.";
+      render();
+    }
+  }
+
+  async function toggleTask(i){
+    let pin=localStorage.getItem("familyParentPin");
+    if(!pin){
+      pin=prompt("PIN γονέα");
+      if(!pin) return;
+      localStorage.setItem("familyParentPin",pin);
+    }
+    const k=key(selected,i);
+    const next=!marks.has(k);
+    el.statusText.textContent="Αποθήκευση…";
+    try{
+      const r=await fetch(API,{
+        method:"POST",
+        headers:{"Content-Type":"application/json"},
+        body:JSON.stringify({pin,child,day_index:selected,task_id:i,done:next})
+      });
+      const j=await r.json();
+      if(r.status===403){
+        localStorage.removeItem("familyParentPin");
+        alert("Λάθος PIN γονέα.");
+        el.statusText.textContent="Λάθος PIN. Πάτησε ξανά στο ★.";
+        return;
+      }
+      if(!r.ok) throw new Error(j.error||"error");
+      if(next) marks.add(k); else marks.delete(k);
+      el.statusText.textContent="Αποθηκεύτηκε ✓";
+      setConnection("ok","Online");
+      render();
+    }catch(err){
+      el.statusText.textContent="Σφάλμα αποθήκευσης. Δοκίμασε ξανά.";
+      setConnection("err","Offline");
+    }
+  }
+
+  function render(){
+    const isA=child==="anelya";
+    el.tabA.classList.toggle("active",isA);
+    el.tabI.classList.toggle("active",!isA);
+    el.hero.className="hero "+(isA?"anelya":"ivanesa");
+    el.childName.textContent=isA?"Ανέλυα":"Ιβανέσα";
+
+    const w=marks.size;
+    const pct=Math.min(100,Math.round(w/60*100));
+    el.weeklyStars.textContent=w+" ★";
+    el.progressBar.style.width=pct+"%";
+    el.progressText.textContent=pct+"%";
+    el.weekLabel.textContent=weekText(weekStart);
+
+    const ds=dayStats(selected);
+    el.todayDone.textContent=ds.done;
+    el.todayLeft.textContent=Math.max(0,ds.total-ds.done);
+    el.selectedDayLabel.textContent=FULL[selected];
+
+    el.days.innerHTML="";
+    DAYS.forEach((name,d)=>{
+      const b=document.createElement("button");
+      b.className="day"+(d===selected?" active":"")+(d===today?" today":"");
+      b.textContent=name;
+      b.onclick=()=>{selected=d;render();};
+      el.days.appendChild(b);
+    });
+
+    el.tasks.innerHTML="";
+    const groups={};
+    TASKS.forEach((t,i)=>{
+      if(t[2].includes(selected)){
+        if(!groups[t[0]]) groups[t[0]]=[];
+        groups[t[0]].push({t,i});
+      }
+    });
+
+    if(!Object.keys(groups).length){
+      el.tasks.innerHTML='<div class="empty">Δεν υπάρχουν εργασίες για αυτή την ημέρα.</div>';
+      return;
+    }
+
+    Object.entries(groups).forEach(([cat,items])=>{
+      const h=document.createElement("div");
+      h.className="category";
+      h.innerHTML="<h3>"+cat+"</h3><span class='badge'>"+FULL[selected]+"</span>";
+      el.tasks.appendChild(h);
+
+      items.forEach(({t,i})=>{
+        const done=marks.has(key(selected,i));
+        const row=document.createElement("div");
+        row.className="task"+(done?" done":"");
+        row.innerHTML=
+          "<div class='taskText'>"+
+            "<div class='taskName'>"+t[1]+"</div>"+
+            (t[3]?"<div class='taskNote'>"+t[3]+"</div>":"")+
+          "</div>"+
+          "<button class='starBtn' aria-label='Βαθμολόγηση'>"+(done?"⭐":"☆")+"</button>";
+        row.querySelector(".starBtn").onclick=()=>toggleTask(i);
+        el.tasks.appendChild(row);
+      });
+    });
+  }
+
+  el.tabA.onclick=()=>{child="anelya";marks=new Set();render();load();};
+  el.tabI.onclick=()=>{child="ivanesa";marks=new Set();render();load();};
+  el.clearPinBtn.onclick=()=>{
+    localStorage.removeItem("familyParentPin");
+    alert("Το αποθηκευμένο PIN καθαρίστηκε από αυτό το κινητό.");
+  };
+
+  render();
+  load();
+})();
+</script>
+</body>
+</html>
