@@ -43,10 +43,61 @@ header{background:rgba(235,248,255,.9)!important;border-bottom:1px solid #cbe6f9
 .stitch-ear:before{left:-14px;transform:rotate(-38deg)}.stitch-ear:after{right:-14px;transform:scaleX(-1) rotate(-38deg)}
 header,main{position:relative;z-index:1}
 
+
+/* idle dance overlay */
+.idleDanceOverlay{
+  position:fixed;inset:0;z-index:60;display:flex;align-items:center;justify-content:center;
+  pointer-events:none;opacity:0;visibility:hidden;transition:opacity .25s ease,visibility .25s ease;
+  background:linear-gradient(180deg,rgba(217,245,255,.20),rgba(239,232,255,.24));
+  backdrop-filter:blur(1px)
+}
+.idleDanceOverlay.show{opacity:1;visibility:visible}
+.alienStage{position:relative;width:230px;height:300px;display:flex;align-items:center;justify-content:center}
+.alienShadow{position:absolute;bottom:28px;width:120px;height:20px;border-radius:50%;background:rgba(60,90,150,.16);filter:blur(4px);animation:shadowPulse .8s ease-in-out infinite}
+.blueAlien{position:relative;width:145px;height:190px;animation:danceBody .8s ease-in-out infinite;filter:drop-shadow(0 16px 18px rgba(65,115,185,.2))}
+.alienHead{position:absolute;left:22px;top:15px;width:101px;height:86px;border-radius:48% 48% 44% 44%;background:#58aaf1;border:3px solid #2f72b0}
+.alienEar{position:absolute;top:28px;width:62px;height:34px;background:#58aaf1;border:3px solid #2f72b0;border-radius:65% 35% 65% 35%}
+.alienEar:after{content:"";position:absolute;inset:6px 8px;border-radius:inherit;background:#e99bca;opacity:.85}
+.alienEar.left{left:-34px;transform:rotate(-24deg);animation:earLeft .8s ease-in-out infinite}.alienEar.right{right:-34px;transform:scaleX(-1) rotate(-24deg);animation:earRight .8s ease-in-out infinite}
+.eye{position:absolute;top:31px;width:22px;height:31px;border-radius:50%;background:#dff6ff;border:2px solid #8cc8e9}.eye:after{content:"";position:absolute;width:8px;height:13px;background:#16263d;border-radius:50%;left:7px;top:9px}
+.eye.left{left:25px}.eye.right{right:25px}
+.nose{position:absolute;left:40px;top:57px;width:21px;height:14px;background:#243650;border-radius:50%}
+.mouth{position:absolute;left:31px;top:69px;width:39px;height:10px;border-bottom:4px solid #243650;border-radius:0 0 30px 30px}
+.alienBody{position:absolute;left:34px;top:91px;width:77px;height:78px;border-radius:44% 44% 48% 48%;background:#4c9de7;border:3px solid #2f72b0}
+.alienBody:after{content:"";position:absolute;left:18px;top:18px;width:35px;height:45px;border-radius:50%;background:#a8dcf4}
+.arm,.leg{position:absolute;background:#4c9de7;border:3px solid #2f72b0}
+.arm{top:104px;width:46px;height:19px;border-radius:20px}.arm.left{left:3px;transform:rotate(22deg);transform-origin:right center;animation:armLeft .8s ease-in-out infinite}.arm.right{right:3px;transform:rotate(-22deg);transform-origin:left center;animation:armRight .8s ease-in-out infinite}
+.leg{top:157px;width:27px;height:43px;border-radius:18px}.leg.left{left:43px;transform-origin:top center;animation:legLeft .8s ease-in-out infinite}.leg.right{right:43px;transform-origin:top center;animation:legRight .8s ease-in-out infinite}
+.musicFloat{position:absolute;font-size:28px;color:#6d7eea;font-weight:900;animation:musicFloat 1.4s ease-in-out infinite}.mf1{left:8px;top:50px}.mf2{right:8px;top:78px;animation-delay:.45s}
+.idleDanceCaption{position:absolute;bottom:0;background:rgba(255,255,255,.84);border:1px solid #d6eafb;color:#47749d;padding:7px 12px;border-radius:999px;font-size:11px;font-weight:850;white-space:nowrap}
+@keyframes danceBody{0%,100%{transform:translateY(0) rotate(-3deg)}25%{transform:translateY(-12px) rotate(3deg)}50%{transform:translateY(0) rotate(4deg)}75%{transform:translateY(-9px) rotate(-4deg)}}
+@keyframes shadowPulse{0%,100%{transform:scaleX(1);opacity:.17}50%{transform:scaleX(.72);opacity:.1}}
+@keyframes earLeft{0%,100%{transform:rotate(-24deg)}50%{transform:rotate(-38deg)}}@keyframes earRight{0%,100%{transform:scaleX(-1) rotate(-24deg)}50%{transform:scaleX(-1) rotate(-38deg)}}
+@keyframes armLeft{0%,100%{transform:rotate(22deg)}50%{transform:rotate(-30deg)}}@keyframes armRight{0%,100%{transform:rotate(-22deg)}50%{transform:rotate(30deg)}}
+@keyframes legLeft{0%,100%{transform:rotate(4deg)}50%{transform:rotate(-18deg)}}@keyframes legRight{0%,100%{transform:rotate(-4deg)}50%{transform:rotate(18deg)}}
+@keyframes musicFloat{0%,100%{transform:translateY(8px) rotate(-8deg);opacity:.3}50%{transform:translateY(-12px) rotate(8deg);opacity:.9}}
+
 </style></head>
 <body><div class="theme-bg" aria-hidden="true">
 <span class="i1">🌺</span><span class="i2">💙</span><span class="i3">🐾</span><span class="i4">✨</span><span class="i5"><i class="stitch-ear"></i></span><span class="i6">🌸</span><span class="i7">💜</span>
-</div><header><div class="head"><h1>Ιβανέσα ⭐</h1><div class="muted">Η δική μου εβδομάδα • μόνο προβολή</div></div></header>
+</div>
+<div id="idleDanceOverlay" class="idleDanceOverlay" aria-hidden="true">
+  <div class="alienStage">
+    <div class="musicFloat mf1">♪</div><div class="musicFloat mf2">♫</div>
+    <div class="alienShadow"></div>
+    <div class="blueAlien">
+      <div class="alienEar left"></div><div class="alienEar right"></div>
+      <div class="alienHead">
+        <div class="eye left"></div><div class="eye right"></div><div class="nose"></div><div class="mouth"></div>
+      </div>
+      <div class="alienBody"></div>
+      <div class="arm left"></div><div class="arm right"></div>
+      <div class="leg left"></div><div class="leg right"></div>
+    </div>
+    <div class="idleDanceCaption">Χορευτικό διάλειμμα 💙</div>
+  </div>
+</div>
+<header><div class="head"><h1>Ιβανέσα ⭐</h1><div class="muted">Η δική μου εβδομάδα • μόνο προβολή</div></div></header>
 <main class="wrap">
 <section class="hero"><div class="heroTop"><div><div class="muted" style="color:#eee">Μπράβο Ιβανέσα! ✨</div><div class="name">Τα αστεράκια μου</div></div><div><div class="stars" id="ws">0 ★</div><div class="muted" style="color:#eee;text-align:right">αυτή την εβδομάδα</div></div></div><div class="progress"><div class="bar" id="bar"></div></div><div class="heroFoot"><span id="wk">—</span><span id="pct">0%</span></div></section>
 <div class="cards"><div class="card"><div class="n" id="td">0</div><div class="l">★ σήμερα</div></div><div class="card"><div class="n" id="left">0</div><div class="l">μένουν σήμερα</div></div><div class="card"><div class="n">60</div><div class="l">στόχος</div></div></div>
@@ -66,5 +117,23 @@ function render(){var w=marks.size,p=Math.min(100,Math.round(w/60*100));ws.textC
 days.innerHTML="";DAYS.forEach(function(n,d){var b=document.createElement("button");b.className="day"+(d===selected?" active":"");b.textContent=n;b.onclick=function(){selected=d;render()};days.appendChild(b)});
 tasks.innerHTML="";var groups={};TASKS.forEach(function(t,i){if(t[2].indexOf(selected)>=0){if(!groups[t[0]])groups[t[0]]=[];groups[t[0]].push([t,i])}});Object.keys(groups).forEach(function(cat){var h=document.createElement("div");h.className="sec";h.innerHTML="<h2>"+cat+"</h2><span class='badge'>"+FULL[selected]+"</span>";tasks.appendChild(h);groups[cat].forEach(function(x){var t=x[0],i=x[1],dn=marks.has(key(selected,i)),d=document.createElement("div");d.className="task"+(dn?" done":"");d.innerHTML="<div class='taskText'><div class='taskName'>"+t[1]+"</div>"+(t[3]?"<div class='taskNote'>"+t[3]+"</div>":"")+"</div><div class='star'>"+starSvg(dn)+"</div>";tasks.appendChild(d)})});
 var rr=[[25,"Διαλέγω οικογενειακό παιχνίδι"],[40,"Διαλέγω ταινία"],[55,"Διαλέγω γλυκό / επιδόρπιο"],[70,"Ξεχωριστή δραστηριότητα Σαββατοκύριακου"]];rewards.innerHTML="";rr.forEach(function(r){var d=document.createElement("div");d.className="reward"+(w>=r[0]?" on":"");d.innerHTML="<b>"+(w>=r[0]?"🎉 ":"")+r[1]+"</b><span class='need'>"+r[0]+" ★</span>";rewards.appendChild(d)})}
+
+var idleDanceTimer=null;
+var IDLE_DANCE_MS=15000;
+function showIdleDance(){var o=document.getElementById("idleDanceOverlay");if(o)o.classList.add("show");}
+function resetIdleDance(){
+  var o=document.getElementById("idleDanceOverlay");if(o)o.classList.remove("show");
+  if(idleDanceTimer)clearTimeout(idleDanceTimer);
+  idleDanceTimer=setTimeout(showIdleDance,IDLE_DANCE_MS);
+}
+["pointerdown","touchstart","scroll","keydown","click"].forEach(function(evt){
+  document.addEventListener(evt,resetIdleDance,{passive:true});
+});
+document.addEventListener("visibilitychange",function(){
+  if(document.hidden){if(idleDanceTimer)clearTimeout(idleDanceTimer);}
+  else{resetIdleDance();}
+});
+resetIdleDance();
+
 render();load();setInterval(load,5000);
 </script></body></html>
