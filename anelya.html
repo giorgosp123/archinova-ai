@@ -18,8 +18,35 @@ header{position:sticky;top:0;z-index:5;padding:14px 16px;background:rgba(250,248
 .box{background:#fff;border:1px solid var(--line);border-radius:18px;padding:14px;margin-top:16px}.row{display:flex;justify-content:space-between;align-items:center;gap:10px}.btn{border:0;border-radius:13px;padding:11px 12px;font-weight:850;background:var(--p);color:#fff}.btn2{background:#f3f4f6;color:#374151}.status{font-size:11px;color:var(--muted)}
 .reward{display:flex;justify-content:space-between;gap:10px;background:#fff;border:1px solid var(--line);border-radius:16px;padding:13px;margin-bottom:8px}.reward.on{background:#fffbeb;border-color:#fde68a}.need{font-size:12px;color:var(--muted);white-space:nowrap}
 @media(max-width:390px){.name{font-size:22px}.stars{font-size:28px}.wrap{padding-left:10px;padding-right:10px}}
+
+/* Wednesday-inspired background only — logic untouched */
+body{background:
+  radial-gradient(circle at 15% 10%,rgba(111,72,190,.14),transparent 26%),
+  radial-gradient(circle at 85% 22%,rgba(59,35,95,.18),transparent 24%),
+  linear-gradient(180deg,#141217 0%,#1b1720 38%,#211a29 100%)!important;
+  color:#f1edf6!important;position:relative;overflow-x:hidden}
+header{background:rgba(20,18,23,.88)!important;border-bottom:1px solid rgba(173,137,220,.18)!important}
+header h1{color:#f5f1f8}
+header .muted{color:#b8afc4!important}
+.hero{background:linear-gradient(135deg,#19151e,#2b2135,#4b3461)!important;box-shadow:0 14px 36px rgba(0,0,0,.32)!important}
+.card,.task,.reward,.box{background:rgba(31,26,37,.92)!important;border-color:rgba(175,145,210,.18)!important;color:#f1edf6!important;backdrop-filter:blur(6px)}
+.task.done{background:rgba(54,45,64,.96)!important;border-color:rgba(164,126,207,.35)!important}
+.day{background:#2a2430!important;color:#d4c9dd!important}
+.day.active{background:#76519a!important;color:white!important}
+.badge{background:#2b2234!important;color:#d9c5ea!important}
+.taskNote,.l,.need,.status{color:#b8afc4!important}
+.theme-bg{position:fixed;inset:0;pointer-events:none;z-index:0;overflow:hidden;opacity:.16}
+.theme-bg span{position:absolute;font-size:28px;filter:grayscale(1);text-shadow:0 0 18px rgba(168,122,214,.45)}
+.theme-bg .i1{top:9%;left:5%;font-size:42px}.theme-bg .i2{top:18%;right:5%;font-size:34px}
+.theme-bg .i3{top:36%;left:2%;font-size:33px}.theme-bg .i4{top:47%;right:3%;font-size:38px}
+.theme-bg .i5{top:67%;left:6%;font-size:35px}.theme-bg .i6{top:78%;right:4%;font-size:42px}
+.theme-bg .i7{top:90%;left:36%;font-size:30px}
+header,main{position:relative;z-index:1}
+
 </style></head>
-<body><header><div class="head"><h1>Ανέλυα ⭐</h1><div class="muted">Η δική μου εβδομάδα • μόνο προβολή</div></div></header>
+<body><div class="theme-bg" aria-hidden="true">
+<span class="i1">🕸️</span><span class="i2">🕷️</span><span class="i3">🖐️</span><span class="i4">🎻</span><span class="i5">🌙</span><span class="i6">🖤</span><span class="i7">🕸️</span>
+</div><header><div class="head"><h1>Ανέλυα ⭐</h1><div class="muted">Η δική μου εβδομάδα • μόνο προβολή</div></div></header>
 <main class="wrap">
 <section class="hero"><div class="heroTop"><div><div class="muted" style="color:#eee">Μπράβο Ανέλυα! ✨</div><div class="name">Τα αστεράκια μου</div></div><div><div class="stars" id="ws">0 ★</div><div class="muted" style="color:#eee;text-align:right">αυτή την εβδομάδα</div></div></div><div class="progress"><div class="bar" id="bar"></div></div><div class="heroFoot"><span id="wk">—</span><span id="pct">0%</span></div></section>
 <div class="cards"><div class="card"><div class="n" id="td">0</div><div class="l">★ σήμερα</div></div><div class="card"><div class="n" id="left">0</div><div class="l">μένουν σήμερα</div></div><div class="card"><div class="n">60</div><div class="l">στόχος</div></div></div>
